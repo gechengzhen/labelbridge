@@ -660,7 +660,7 @@ class YoloLabelingTool(wx.Frame):
                 self.UpdateAnnotationList()
         dlg.Destroy()
 
-    def UpdateAllAnnotationFiles(self, id_mapping, deleted_class_id):
+    def UpdateAllAnnotationFiles(self, id_mapping):
         """更新所有标注文件中的类别ID"""
         if not self.image_files:
             return
@@ -680,10 +680,6 @@ class YoloLabelingTool(wx.Frame):
                             if len(parts) == 5:
                                 class_id = int(parts[0])
                                 bbox = [float(x) for x in parts[1:]]
-
-                                # 如果是被删除的类别，跳过这个标注
-                                if class_id == deleted_class_id:
-                                    continue
 
                                 # 更新类别ID
                                 if class_id in id_mapping:
@@ -746,7 +742,7 @@ class YoloLabelingTool(wx.Frame):
                     ann['class'] = id_mapping[old_class_id]
 
             # 更新所有标注文件
-            self.UpdateAllAnnotationFiles(id_mapping, class_id_to_delete)
+            self.UpdateAllAnnotationFiles(id_mapping)
 
             self.UpdateClassList()
 
@@ -764,47 +760,6 @@ class YoloLabelingTool(wx.Frame):
             self.annotation_panel.Refresh()
             self.UpdateAnnotationList()
         dlg.Destroy()
-
-    def UpdateAllAnnotationFilesForReorder(self, id_mapping):
-        """更新所有标注文件中的类别ID（用于重排序）"""
-        if not self.image_files:
-            return
-
-        for image_path in self.image_files:
-            # 生成对应的标注文件路径
-            base_name = os.path.splitext(os.path.basename(image_path))[0]
-            txt_path = os.path.join(os.path.dirname(image_path), f"{base_name}.txt")
-
-            if os.path.exists(txt_path):
-                try:
-                    # 读取标注文件
-                    annotations = []
-                    with open(txt_path, 'r') as f:
-                        for line in f:
-                            parts = line.strip().split()
-                            if len(parts) == 5:
-                                class_id = int(parts[0])
-                                bbox = [float(x) for x in parts[1:]]
-
-                                # 更新类别ID
-                                if class_id in id_mapping:
-                                    new_class_id = id_mapping[class_id]
-                                    annotations.append((new_class_id, bbox))
-                                else:
-                                    # 如果映射中没有这个ID，保持原样（理论上不应该发生）
-                                    annotations.append((class_id, bbox))
-
-                    # 写回文件
-                    if annotations:
-                        with open(txt_path, 'w') as f:
-                            for class_id, bbox in annotations:
-                                f.write(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}\n")
-                    else:
-                        # 如果没有标注了，删除标注文件
-                        os.remove(txt_path)
-
-                except Exception as e:
-                    print(f"更新标注文件 {txt_path} 失败: {e}")
 
     def OnMoveUp(self, event):
         """上移类别"""
@@ -826,7 +781,7 @@ class YoloLabelingTool(wx.Frame):
         id_mapping = self.ReassignClassIds(sorted_items)
 
         # 更新所有标注文件
-        self.UpdateAllAnnotationFilesForReorder(id_mapping)
+        self.UpdateAllAnnotationFiles(id_mapping)
 
         self.UpdateClassList()
         self.class_list.SetSelection(selection - 1)
@@ -857,7 +812,7 @@ class YoloLabelingTool(wx.Frame):
         id_mapping = self.ReassignClassIds(sorted_items)
 
         # 更新所有标注文件
-        self.UpdateAllAnnotationFilesForReorder(id_mapping)
+        self.UpdateAllAnnotationFiles(id_mapping)
 
         self.UpdateClassList()
         self.class_list.SetSelection(selection + 1)
