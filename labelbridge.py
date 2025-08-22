@@ -166,7 +166,10 @@ class AnnotationPanel(wx.Panel):
             self.DrawBox(dc, box, color, 2)
 
             # 绘制类别标签
-            class_name = self.main_frame.class_names.get(ann['class'], f"Class {ann['class']}")
+            if ann['class'] < len(self.main_frame.class_names):
+                class_name = self.main_frame.class_names[ann['class']]
+            else:
+                class_name = f"Class {ann['class']}"
             dc.SetTextForeground(color)
             dc.DrawText(class_name, x, max(0, y - 20))
 
@@ -289,7 +292,7 @@ class AnnotationPanel(wx.Panel):
         rel_w = img_w / self.image_size[0]
         rel_h = img_h / self.image_size[1]
 
-        return (center_x, center_y, rel_w, rel_h)
+        return center_x, center_y, rel_w, rel_h
 
     def YoloToPixel(self, yolo_bbox):
         """YOLO格式转像素坐标"""
@@ -307,7 +310,7 @@ class AnnotationPanel(wx.Panel):
         pw = img_w * self.scale_factor
         ph = img_h * self.scale_factor
 
-        return (int(px), int(py), int(pw), int(ph))
+        return int(px), int(py), int(pw), int(ph)
 
     def LoadAnnotations(self):
         """加载标注文件"""
@@ -368,7 +371,7 @@ class YoloLabelingTool(wx.Frame):
         self.annotation_panel = None
         self.image_files = []
         self.current_image_index = -1
-        self.class_names = {}  # 初始为空
+        self.class_names = []  # 初始为空
         self.current_folder = None
 
         self.InitUI()
@@ -526,11 +529,11 @@ class YoloLabelingTool(wx.Frame):
             try:
                 with open(classes_path, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
-                    self.class_names = {}
+                    self.class_names = []
                     for i, line in enumerate(lines):
                         class_name = line.strip()
                         if class_name:
-                            self.class_names[i] = class_name
+                            self.class_names.append(class_name)
                 return True
             except Exception as e:
                 wx.MessageBox(f"读取classes.txt失败: {str(e)}", "错误", wx.OK | wx.ICON_ERROR)
@@ -612,7 +615,7 @@ class YoloLabelingTool(wx.Frame):
 
             try:
                 with open(classes_path, 'w', encoding='utf-8') as f:
-                    for class_id in sorted(self.class_names.keys()):
+                    for class_id in range(len(self.class_names)):
                         f.write(f"{self.class_names[class_id]}\n")
 
                 wx.MessageBox(f"导出完成！\n类别文件: {classes_path}", "导出成功", wx.OK | wx.ICON_INFORMATION)
@@ -626,9 +629,9 @@ class YoloLabelingTool(wx.Frame):
             class_name = dlg.GetValue().strip()
             if class_name:
                 # 找到下一个可用的类别ID
-                max_id = max(self.class_names.keys()) if self.class_names else -1
+                max_id = len(self.class_names) if self.class_names else -1
                 new_id = max_id + 1
-                self.class_names[new_id] = class_name
+                self.class_names.append(class_name)
                 self.UpdateClassList()
                 # 自动选择新添加的类别
                 self.class_list.SetSelection(self.class_list.GetCount() - 1)
@@ -642,15 +645,13 @@ class YoloLabelingTool(wx.Frame):
             wx.MessageBox("请先选择要编辑的类别", "提示", wx.OK | wx.ICON_INFORMATION)
             return
 
-        class_ids = sorted(self.class_names.keys())
-        class_id = class_ids[selection]
-        current_name = self.class_names[class_id]
+        current_name = self.class_names[selection]
 
         dlg = wx.TextEntryDialog(self, "编辑类别名称:", "编辑类别", current_name)
         if dlg.ShowModal() == wx.ID_OK:
             new_name = dlg.GetValue().strip()
             if new_name and new_name != current_name:
-                self.class_names[class_id] = new_name
+                self.class_names[selection] = new_name
                 self.UpdateClassList()
                 self.class_list.SetSelection(selection)
                 self.OnClassSelect(None)
@@ -680,12 +681,10 @@ class YoloLabelingTool(wx.Frame):
                             if len(parts) == 5:
                                 class_id = int(parts[0])
                                 bbox = [float(x) for x in parts[1:]]
-
                                 # 更新类别ID
                                 if class_id in id_mapping:
                                     new_class_id = id_mapping[class_id]
                                     annotations.append((new_class_id, bbox))
-
                     # 写回文件
                     if annotations:
                         with open(txt_path, 'w') as f:
@@ -705,9 +704,7 @@ class YoloLabelingTool(wx.Frame):
             wx.MessageBox("请先选择要删除的类别", "提示", wx.OK | wx.ICON_INFORMATION)
             return
 
-        class_ids = sorted(self.class_names.keys())
-        class_id_to_delete = class_ids[selection]
-        class_name = self.class_names[class_id_to_delete]
+        class_name = self.class_names[selection]
 
         dlg = wx.MessageDialog(self, f"确定要删除类别 '{class_name}' 吗？\n注意：这将删除所有图片中使用该类别的标注框！",
                                "确认删除", wx.YES_NO | wx.ICON_QUESTION)
@@ -719,17 +716,17 @@ class YoloLabelingTool(wx.Frame):
             # 删除当前图片中所有使用该类别的标注
             self.annotation_panel.annotations = [
                 ann for ann in self.annotation_panel.annotations
-                if ann['class'] != class_id_to_delete
+                if ann['class'] != selection
             ]
 
             # 重新构建类别字典，确保ID连续
-            new_class_names = {}
+            new_class_names = []
             id_mapping = {}  # 旧ID到新ID的映射
 
             new_id = 0
-            for old_id in sorted(self.class_names.keys()):
-                if old_id != class_id_to_delete:
-                    new_class_names[new_id] = self.class_names[old_id]
+            for old_id in range(len(self.class_names)):
+                if old_id != selection:
+                    new_class_names.append(self.class_names[old_id])
                     id_mapping[old_id] = new_id
                     new_id += 1
 
@@ -772,7 +769,7 @@ class YoloLabelingTool(wx.Frame):
             self.annotation_panel.SaveAnnotations()
 
         # 获取排序后的类别列表
-        sorted_items = [(class_id, class_name) for class_id, class_name in sorted(self.class_names.items())]
+        sorted_items = [(class_id, class_name) for class_id, class_name in enumerate(self.class_names)]
 
         # 交换位置
         sorted_items[selection], sorted_items[selection - 1] = sorted_items[selection - 1], sorted_items[selection]
@@ -803,7 +800,7 @@ class YoloLabelingTool(wx.Frame):
             self.annotation_panel.SaveAnnotations()
 
         # 获取排序后的类别列表
-        sorted_items = [(class_id, class_name) for class_id, class_name in sorted(self.class_names.items())]
+        sorted_items = [(class_id, class_name) for class_id, class_name in enumerate(self.class_names)]
 
         # 交换位置
         sorted_items[selection], sorted_items[selection + 1] = sorted_items[selection + 1], sorted_items[selection]
@@ -829,7 +826,7 @@ class YoloLabelingTool(wx.Frame):
         old_to_new_mapping = {}
 
         # 重新构建class_names字典，使用连续的ID
-        new_class_names = {}
+        new_class_names = self.class_names
         for new_id, (old_id, class_name) in enumerate(sorted_items):
             new_class_names[new_id] = class_name
             old_to_new_mapping[old_id] = new_id
@@ -848,17 +845,15 @@ class YoloLabelingTool(wx.Frame):
         """选择类别"""
         selection = self.class_list.GetSelection()
         if selection != wx.NOT_FOUND:
-            class_ids = sorted(self.class_names.keys())
-            class_id = class_ids[selection]
-            class_name = self.class_names[class_id]
-            self.current_class_label.SetLabel(f"{class_id}: {class_name}")
+            class_name = self.class_names[selection]
+            self.current_class_label.SetLabel(f"{selection}: {class_name}")
         else:
             self.current_class_label.SetLabel("无")
 
     def UpdateClassList(self):
         """更新类别列表显示"""
         self.class_list.Clear()
-        for class_id in sorted(self.class_names.keys()):
+        for class_id in range(len(self.class_names)):
             self.class_list.Append(f"{class_id}: {self.class_names[class_id]}")
 
         # 如果有类别，默认选择第一个
@@ -872,15 +867,17 @@ class YoloLabelingTool(wx.Frame):
         """获取当前选择的类别ID"""
         selection = self.class_list.GetSelection()
         if selection != wx.NOT_FOUND and self.class_names:
-            class_ids = sorted(self.class_names.keys())
-            return class_ids[selection]
+            return selection
         return 0  # 如果没有选择或没有类别，返回0
 
     def UpdateAnnotationList(self):
         """更新标注列表显示"""
         self.annotation_list.Clear()
         for i, ann in enumerate(self.annotation_panel.annotations):
-            class_name = self.class_names.get(ann['class'], f"Class {ann['class']}")
+            if ann['class'] in self.class_names:
+                class_name = ann['class']
+            else:
+                class_name = f"Class {ann['class']}"
             bbox = ann['bbox']
             self.annotation_list.Append(
                 f"{i + 1}. {class_name} ({bbox[0]:.3f}, {bbox[1]:.3f}, {bbox[2]:.3f}, {bbox[3]:.3f})")
@@ -907,7 +904,7 @@ class YoloLabelingTool(wx.Frame):
         info.SetVersion("1.0")
         info.SetDescription(
             "用于YOLO目标检测的图片标注工具\n\n使用说明:\n1. 导入图片文件夹\n2. 选择类别\n3. 在图片上拖拽鼠标画框\n4. 右键删除标注框\n5. 保存并导出标注")
-        info.SetCopyright("(C) 2024")
+        info.SetCopyright("(C) 2025")
 
         wx.adv.AboutBox(info)
 
