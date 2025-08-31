@@ -23,6 +23,14 @@ class AnnotationPanel(wx.Panel):
         self.drawing = False
         self.start_pos = None
 
+        # 新增：框选中和编辑相关
+        self.selected_annotation_index = -1
+        self.editing_mode = None  # None, 'move', 'resize'
+        self.resize_handle = None  # 'tl', 'tr', 'bl', 'br', 't', 'b', 'l', 'r'
+        self.edit_start_pos = None
+        self.original_bbox = None
+        self.handle_size = 6  # 调整手柄大小
+
         # 缓存的背景图片
         self.background_bitmap = None
 
@@ -35,6 +43,10 @@ class AnnotationPanel(wx.Panel):
         self.Bind(wx.EVT_MOTION, self.OnMouseMove)
         self.Bind(wx.EVT_RIGHT_DOWN, self.OnRightDown)
         self.Bind(wx.EVT_SIZE, self.OnSize)
+        self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
+
+        # 设置焦点以接收键盘事件
+        self.SetCanFocus(True)
 
     def LoadImage(self, image_path):
         """加载图片"""
@@ -45,6 +57,7 @@ class AnnotationPanel(wx.Panel):
             self.FitImageToPanel()
             self.LoadAnnotations()
             self.CreateBackgroundBitmap()
+            self.selected_annotation_index = -1  # 重置选择
             self.Refresh()
             return True
         except Exception as e:
@@ -87,7 +100,7 @@ class AnnotationPanel(wx.Panel):
         # 创建背景缓存位图
         self.background_bitmap = wx.Bitmap(panel_size.width, panel_size.height)
 
-        # 在背景位图上绘制图片和固定标注
+        # 在背景位图上绘制图片
         dc = wx.MemoryDC()
         dc.SelectObject(self.background_bitmap)
         dc.SetBackground(wx.Brush(wx.Colour(240, 240, 240)))
@@ -104,12 +117,8 @@ class AnnotationPanel(wx.Panel):
                 scaled_image = self.image.Scale(scaled_width, scaled_height)
                 bitmap = wx.Bitmap(scaled_image)
                 dc.DrawBitmap(bitmap, int(self.offset_x), int(self.offset_y))
-
-                # 绘制已有的标注框
-                self.DrawAnnotationsOnDC(dc)
             except Exception as e:
                 print(f"绘制图片时出错: {e}")
-                # 如果出错，至少保持背景色
 
         dc.SelectObject(wx.NullBitmap)
 
@@ -145,25 +154,35 @@ class AnnotationPanel(wx.Panel):
         dc = wx.BufferedPaintDC(self)
 
         if self.background_bitmap:
-            # 绘制缓存的背景图片（包含图片和固定标注）
+            # 绘制缓存的背景图片
             dc.DrawBitmap(self.background_bitmap, 0, 0)
 
-            # 只绘制当前正在画的框
+            # 绘制所有标注框
+            self.DrawAllAnnotations(dc)
+
+            # 绘制当前正在画的框
             if self.current_box and self.drawing:
                 self.DrawBox(dc, self.current_box, wx.Colour(0, 255, 0), 2)
+
         else:
             dc.Clear()
 
-    def DrawAnnotationsOnDC(self, dc):
-        """在指定DC上绘制所有标注框"""
-        for ann in self.annotations:
+    def DrawAllAnnotations(self, dc):
+        """绘制所有标注框"""
+        for i, ann in enumerate(self.annotations):
             # 转换坐标
             x, y, w, h = self.YoloToPixel(ann['bbox'])
             box = (x, y, x + w, y + h)
 
-            # 绘制框
-            color = wx.Colour(255, 0, 0) if ann == self.annotations[-1] else wx.Colour(0, 0, 255)
-            self.DrawBox(dc, box, color, 2)
+            # 选中的框用不同颜色
+            if i == self.selected_annotation_index:
+                color = wx.Colour(255, 0, 0)  # 红色表示选中
+                self.DrawBox(dc, box, color, 3)
+                # 绘制调整手柄
+                self.DrawResizeHandles(dc, box)
+            else:
+                color = wx.Colour(0, 0, 255)  # 蓝色表示未选中
+                self.DrawBox(dc, box, color, 2)
 
             # 绘制类别标签
             if ann['class'] < len(self.main_frame.class_names):
@@ -182,13 +201,110 @@ class AnnotationPanel(wx.Panel):
         x1, y1, x2, y2 = box
         dc.DrawRectangle(x1, y1, x2 - x1, y2 - y1)
 
+    def DrawResizeHandles(self, dc, box):
+        """绘制调整手柄"""
+        x1, y1, x2, y2 = box
+        cx = (x1 + x2) // 2
+        cy = (y1 + y2) // 2
+
+        # 设置手柄样式
+        dc.SetPen(wx.Pen(wx.Colour(255, 0, 0), 1))
+        dc.SetBrush(wx.Brush(wx.Colour(255, 255, 255)))
+
+        half_size = self.handle_size // 2
+
+        # 八个调整手柄的位置
+        handles = [
+            (x1 - half_size, y1 - half_size),  # 左上 (tl)
+            (x2 - half_size, y1 - half_size),  # 右上 (tr)
+            (x1 - half_size, y2 - half_size),  # 左下 (bl)
+            (x2 - half_size, y2 - half_size),  # 右下 (br)
+            (cx - half_size, y1 - half_size),  # 上中 (t)
+            (cx - half_size, y2 - half_size),  # 下中 (b)
+            (x1 - half_size, cy - half_size),  # 左中 (l)
+            (x2 - half_size, cy - half_size),  # 右中 (r)
+        ]
+
+        for hx, hy in handles:
+            dc.DrawRectangle(hx, hy, self.handle_size, self.handle_size)
+
+    def GetResizeHandle(self, pos, box):
+        """获取鼠标位置对应的调整手柄"""
+        x1, y1, x2, y2 = box
+        cx = (x1 + x2) // 2
+        cy = (y1 + y2) // 2
+
+        half_size = self.handle_size // 2
+
+        # 检查各个手柄
+        handles = {
+            'tl': (x1 - half_size, y1 - half_size, x1 + half_size, y1 + half_size),
+            'tr': (x2 - half_size, y1 - half_size, x2 + half_size, y1 + half_size),
+            'bl': (x1 - half_size, y2 - half_size, x1 + half_size, y2 + half_size),
+            'br': (x2 - half_size, y2 - half_size, x2 + half_size, y2 + half_size),
+            't': (cx - half_size, y1 - half_size, cx + half_size, y1 + half_size),
+            'b': (cx - half_size, y2 - half_size, cx + half_size, y2 + half_size),
+            'l': (x1 - half_size, cy - half_size, x1 + half_size, cy + half_size),
+            'r': (x2 - half_size, cy - half_size, x2 + half_size, cy + half_size),
+        }
+
+        for handle_name, (hx1, hy1, hx2, hy2) in handles.items():
+            if hx1 <= pos.x <= hx2 and hy1 <= pos.y <= hy2:
+                return handle_name
+
+        return None
+
+    def GetAnnotationAt(self, pos):
+        """获取指定位置的标注索引"""
+        for i, ann in enumerate(self.annotations):
+            x, y, w, h = self.YoloToPixel(ann['bbox'])
+            if x <= pos.x <= x + w and y <= pos.y <= y + h:
+                return i
+        return -1
+
     def OnLeftDown(self, event):
         """鼠标左键按下"""
         if not self.image:
             return
 
+        self.SetFocus()  # 获取焦点以接收键盘事件
         pos = event.GetPosition()
-        if self.IsInImageArea(pos):
+
+        if not self.IsInImageArea(pos):
+            return
+
+        # 检查是否点击了选中标注的调整手柄
+        if self.selected_annotation_index >= 0:
+            ann = self.annotations[self.selected_annotation_index]
+            x, y, w, h = self.YoloToPixel(ann['bbox'])
+            box = (x, y, x + w, y + h)
+
+            handle = self.GetResizeHandle(pos, box)
+            if handle:
+                # 开始调整大小
+                self.editing_mode = 'resize'
+                self.resize_handle = handle
+                self.edit_start_pos = pos
+                self.original_bbox = ann['bbox'][:]
+                return
+
+        # 检查是否点击了标注框
+        clicked_index = self.GetAnnotationAt(pos)
+
+        if clicked_index >= 0:
+            # 如果点击的是已选中的框，开始移动
+            if clicked_index == self.selected_annotation_index:
+                self.editing_mode = 'move'
+                self.edit_start_pos = pos
+                self.original_bbox = self.annotations[clicked_index]['bbox'][:]
+            else:
+                # 选中新的框
+                self.selected_annotation_index = clicked_index
+                self.Refresh()
+        else:
+            # 取消选择，开始画新框
+            self.selected_annotation_index = -1
+
             # 检查是否有可用的类别
             if not self.main_frame.class_names:
                 # 提示新建类别
@@ -207,45 +323,198 @@ class AnnotationPanel(wx.Panel):
             clamped_pos = self.ClampPositionToImage(pos)
             self.start_pos = clamped_pos
             self.current_box = (clamped_pos.x, clamped_pos.y, clamped_pos.x, clamped_pos.y)
+            self.Refresh()
 
     def OnLeftUp(self, event):
         """鼠标左键释放"""
-        if not self.drawing:
-            return
+        pos = event.GetPosition()
 
-        self.drawing = False
-        if self.current_box:
-            x1, y1, x2, y2 = self.current_box
+        if self.editing_mode == 'move':
+            # 结束移动
+            self.editing_mode = None
+            self.edit_start_pos = None
+            self.original_bbox = None
 
-            # 确保框有一定大小
-            if abs(x2 - x1) > 5 and abs(y2 - y1) > 5:
-                # 转换为YOLO格式并添加标注
-                yolo_bbox = self.PixelToYolo((min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1)))
+        elif self.editing_mode == 'resize':
+            # 结束调整大小
+            self.editing_mode = None
+            self.resize_handle = None
+            self.edit_start_pos = None
+            self.original_bbox = None
 
-                # 获取当前选择的类别
-                current_class = self.main_frame.GetCurrentClass()
+        elif self.drawing:
+            # 结束画框
+            self.drawing = False
+            if self.current_box:
+                x1, y1, x2, y2 = self.current_box
 
-                annotation = {
-                    'class': current_class,
-                    'bbox': yolo_bbox
-                }
-                self.annotations.append(annotation)
-                self.main_frame.UpdateAnnotationList()
+                # 确保框有一定大小
+                if abs(x2 - x1) > 5 and abs(y2 - y1) > 5:
+                    # 转换为YOLO格式并添加标注
+                    yolo_bbox = self.PixelToYolo((min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1)))
 
-                # 重新创建背景缓存以包含新标注
-                self.CreateBackgroundBitmap()
+                    # 获取当前选择的类别
+                    current_class = self.main_frame.GetCurrentClass()
 
-            self.current_box = None
-            self.Refresh()
+                    annotation = {
+                        'class': current_class,
+                        'bbox': yolo_bbox
+                    }
+                    self.annotations.append(annotation)
+                    self.main_frame.UpdateAnnotationList()
+
+                    # 选中新创建的标注
+                    self.selected_annotation_index = len(self.annotations) - 1
+
+                self.current_box = None
+                self.Refresh()
 
     def OnMouseMove(self, event):
         """鼠标移动"""
-        if self.drawing and self.start_pos:
-            pos = event.GetPosition()
-            # 限制当前位置在图片内
+        pos = event.GetPosition()
+
+        if self.editing_mode == 'move' and self.selected_annotation_index >= 0:
+            # 移动标注框
+            dx = pos.x - self.edit_start_pos.x
+            dy = pos.y - self.edit_start_pos.y
+
+            # 将像素偏移转换为YOLO格式偏移
+            dx_yolo = dx / (self.scale_factor * self.image_size[0])
+            dy_yolo = dy / (self.scale_factor * self.image_size[1])
+
+            # 更新标注位置
+            new_bbox = list(self.original_bbox)
+            new_bbox[0] += dx_yolo  # 中心点x
+            new_bbox[1] += dy_yolo  # 中心点y
+
+            # 确保标注框不超出图片边界
+            half_w = new_bbox[2] / 2
+            half_h = new_bbox[3] / 2
+            new_bbox[0] = max(half_w, min(1 - half_w, new_bbox[0]))
+            new_bbox[1] = max(half_h, min(1 - half_h, new_bbox[1]))
+
+            self.annotations[self.selected_annotation_index]['bbox'] = new_bbox
+            self.main_frame.UpdateAnnotationList()
+            self.Refresh()
+
+        elif self.editing_mode == 'resize' and self.selected_annotation_index >= 0:
+            # 调整标注框大小
+            self.ResizeAnnotation(pos)
+            self.main_frame.UpdateAnnotationList()
+            self.Refresh()
+
+        elif self.drawing and self.start_pos:
+            # 画新框
             clamped_pos = self.ClampPositionToImage(pos)
             self.current_box = (self.start_pos.x, self.start_pos.y, clamped_pos.x, clamped_pos.y)
-            self.Refresh()  # 只触发前景重绘
+            self.Refresh()
+        else:
+            # 更新鼠标光标
+            self.UpdateCursor(pos)
+
+    def ResizeAnnotation(self, pos):
+        """调整标注框大小"""
+        if not self.original_bbox or not self.edit_start_pos:
+            return
+
+        # 获取原始框的像素坐标
+        orig_x, orig_y, orig_w, orig_h = self.YoloToPixel(self.original_bbox)
+        orig_x1, orig_y1 = orig_x, orig_y
+        orig_x2, orig_y2 = orig_x + orig_w, orig_y + orig_h
+
+        # 计算鼠标移动距离
+        dx = pos.x - self.edit_start_pos.x
+        dy = pos.y - self.edit_start_pos.y
+
+        # 根据调整手柄类型计算新的边界
+        new_x1, new_y1, new_x2, new_y2 = orig_x1, orig_y1, orig_x2, orig_y2
+
+        if 'l' in self.resize_handle:  # 左边
+            new_x1 = orig_x1 + dx
+        if 'r' in self.resize_handle:  # 右边
+            new_x2 = orig_x2 + dx
+        if 't' in self.resize_handle:  # 上边
+            new_y1 = orig_y1 + dy
+        if 'b' in self.resize_handle:  # 下边
+            new_y2 = orig_y2 + dy
+
+        # 确保最小大小
+        min_size = 10
+        if new_x2 - new_x1 < min_size:
+            if 'l' in self.resize_handle:
+                new_x1 = new_x2 - min_size
+            else:
+                new_x2 = new_x1 + min_size
+
+        if new_y2 - new_y1 < min_size:
+            if 't' in self.resize_handle:
+                new_y1 = new_y2 - min_size
+            else:
+                new_y2 = new_y1 + min_size
+
+        # 限制在图片范围内
+        img_x1 = self.offset_x
+        img_y1 = self.offset_y
+        img_x2 = self.offset_x + self.image_size[0] * self.scale_factor
+        img_y2 = self.offset_y + self.image_size[1] * self.scale_factor
+
+        new_x1 = max(img_x1, min(img_x2, new_x1))
+        new_y1 = max(img_y1, min(img_y2, new_y1))
+        new_x2 = max(img_x1, min(img_x2, new_x2))
+        new_y2 = max(img_y1, min(img_y2, new_y2))
+
+        # 转换回YOLO格式
+        new_bbox = self.PixelToYolo((min(new_x1, new_x2), min(new_y1, new_y2),
+                                     abs(new_x2 - new_x1), abs(new_y2 - new_y1)))
+
+        self.annotations[self.selected_annotation_index]['bbox'] = new_bbox
+
+    def UpdateCursor(self, pos):
+        """更新鼠标光标"""
+        if self.selected_annotation_index >= 0:
+            ann = self.annotations[self.selected_annotation_index]
+            x, y, w, h = self.YoloToPixel(ann['bbox'])
+            box = (x, y, x + w, y + h)
+
+            handle = self.GetResizeHandle(pos, box)
+            if handle:
+                # 设置调整大小光标
+                cursor_map = {
+                    'tl': wx.CURSOR_SIZENWSE, 'br': wx.CURSOR_SIZENWSE,
+                    'tr': wx.CURSOR_SIZENESW, 'bl': wx.CURSOR_SIZENESW,
+                    't': wx.CURSOR_SIZENS, 'b': wx.CURSOR_SIZENS,
+                    'l': wx.CURSOR_SIZEWE, 'r': wx.CURSOR_SIZEWE,
+                }
+                self.SetCursor(wx.Cursor(cursor_map.get(handle, wx.CURSOR_DEFAULT)))
+                return
+            elif x <= pos.x <= x + w and y <= pos.y <= y + h:
+                # 在选中框内，设置移动光标
+                self.SetCursor(wx.Cursor(wx.CURSOR_SIZING))
+                return
+
+        # 默认光标
+        self.SetCursor(wx.Cursor(wx.CURSOR_DEFAULT))
+
+    def OnKeyDown(self, event):
+        """键盘事件"""
+        key_code = event.GetKeyCode()
+
+        if key_code == wx.WXK_DELETE or key_code == wx.WXK_BACK:
+            # 删除选中的标注
+            if self.selected_annotation_index >= 0:
+                del self.annotations[self.selected_annotation_index]
+                self.selected_annotation_index = -1
+                self.main_frame.UpdateAnnotationList()
+                self.Refresh()
+        elif key_code == wx.WXK_ESCAPE:
+            # 取消选择
+            self.selected_annotation_index = -1
+            self.drawing = False
+            self.current_box = None
+            self.editing_mode = None
+            self.Refresh()
+
+        event.Skip()
 
     def OnRightDown(self, event):
         """右键删除标注"""
@@ -254,16 +523,15 @@ class AnnotationPanel(wx.Panel):
 
         pos = event.GetPosition()
         # 查找点击位置的标注
-        for i, ann in enumerate(self.annotations):
-            x, y, w, h = self.YoloToPixel(ann['bbox'])
-            if x <= pos.x <= x + w and y <= pos.y <= y + h:
-                del self.annotations[i]
-                self.main_frame.UpdateAnnotationList()
-
-                # 重新创建背景缓存
-                self.CreateBackgroundBitmap()
-                self.Refresh()
-                break
+        clicked_index = self.GetAnnotationAt(pos)
+        if clicked_index >= 0:
+            del self.annotations[clicked_index]
+            if self.selected_annotation_index == clicked_index:
+                self.selected_annotation_index = -1
+            elif self.selected_annotation_index > clicked_index:
+                self.selected_annotation_index -= 1
+            self.main_frame.UpdateAnnotationList()
+            self.Refresh()
 
     def IsInImageArea(self, pos):
         """检查位置是否在图片区域内"""
@@ -310,7 +578,8 @@ class AnnotationPanel(wx.Panel):
         pw = img_w * self.scale_factor
         ph = img_h * self.scale_factor
 
-        return int(px), int(py), int(pw), int(ph)
+        # return int(px), int(py), int(pw), int(ph)
+        return round(px), round(py), round(pw), round(ph)
 
     def LoadAnnotations(self):
         """加载标注文件"""
@@ -362,11 +631,10 @@ class AnnotationPanel(wx.Panel):
 
 class YoloLabelingTool(wx.Frame):
     def __init__(self):
-        super().__init__(None, title="YOLO标注工具", size=wx.Size(1200, 800))
+        super().__init__(None, title="YOLO标注工具 - 增强版", size=wx.Size(1200, 800))
 
         self.image_list = None
         self.current_class_label = None
-        self.class_list = None
         self.annotation_list = None
         self.annotation_panel = None
         self.image_files = []
@@ -404,6 +672,23 @@ class YoloLabelingTool(wx.Frame):
 
         left_sizer.Add(file_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
+        # 操作提示
+        help_box = wx.StaticBox(left_panel, label="操作提示")
+        help_sizer = wx.StaticBoxSizer(help_box, wx.VERTICAL)
+
+        help_text = wx.StaticText(left_panel, label=
+        "• 左键拖拽：创建新框\n"
+        "• 单击框：选中标注\n"
+        "• 拖拽框：移动标注\n"
+        "• 拖拽角点/边：调整大小\n"
+        "• 右键框：删除标注\n"
+        "• Delete键：删除选中标注\n"
+        "• ESC键：取消选择")
+        help_text.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        help_sizer.Add(help_text, 0, wx.EXPAND | wx.ALL, 5)
+
+        left_sizer.Add(help_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
         # 图片列表
         list_box = wx.StaticBox(left_panel, label="图片列表")
         list_sizer = wx.StaticBoxSizer(list_box, wx.VERTICAL)
@@ -411,6 +696,18 @@ class YoloLabelingTool(wx.Frame):
         self.image_list = wx.ListBox(left_panel)
         self.image_list.Bind(wx.EVT_LISTBOX, self.OnImageSelect)
         list_sizer.Add(self.image_list, 1, wx.EXPAND | wx.ALL, 5)
+
+        # 导航按钮
+        nav_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        prev_btn = wx.Button(left_panel, label="上一张")
+        prev_btn.Bind(wx.EVT_BUTTON, self.OnPrevImage)
+        nav_sizer.Add(prev_btn, 1, wx.EXPAND | wx.RIGHT, 2)
+
+        next_btn = wx.Button(left_panel, label="下一张")
+        next_btn.Bind(wx.EVT_BUTTON, self.OnNextImage)
+        nav_sizer.Add(next_btn, 1, wx.EXPAND | wx.LEFT, 2)
+
+        list_sizer.Add(nav_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         left_sizer.Add(list_sizer, 1, wx.EXPAND | wx.ALL, 5)
 
@@ -469,6 +766,7 @@ class YoloLabelingTool(wx.Frame):
         ann_sizer = wx.StaticBoxSizer(ann_box, wx.VERTICAL)
 
         self.annotation_list = wx.ListBox(left_panel)
+        self.annotation_list.Bind(wx.EVT_LISTBOX, self.OnAnnotationSelect)
         ann_sizer.Add(self.annotation_list, 1, wx.EXPAND | wx.ALL, 5)
 
         del_ann_btn = wx.Button(left_panel, label="删除选中标注")
@@ -493,7 +791,7 @@ class YoloLabelingTool(wx.Frame):
 
         # 创建状态栏
         self.CreateStatusBar()
-        self.SetStatusText("就绪")
+        self.SetStatusText("就绪 - 左键拖拽创建框，单击选中，拖拽移动/调整大小")
 
     def CreateMenuBar(self):
         """创建菜单栏"""
@@ -508,6 +806,13 @@ class YoloLabelingTool(wx.Frame):
 
         menubar.Append(file_menu, "文件")
 
+        # 导航菜单
+        nav_menu = wx.Menu()
+        nav_menu.Append(101, "上一张\tLeft")
+        nav_menu.Append(102, "下一张\tRight")
+
+        menubar.Append(nav_menu, "导航")
+
         # 帮助菜单
         help_menu = wx.Menu()
         help_menu.Append(wx.ID_ABOUT, "关于")
@@ -521,6 +826,38 @@ class YoloLabelingTool(wx.Frame):
         self.Bind(wx.EVT_MENU, self.OnSave, id=wx.ID_SAVE)
         self.Bind(wx.EVT_MENU, self.OnExit, id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self.OnAbout, id=wx.ID_ABOUT)
+        self.Bind(wx.EVT_MENU, self.OnPrevImage, id=101)
+        self.Bind(wx.EVT_MENU, self.OnNextImage, id=102)
+
+        # 绑定快捷键
+        accel_tbl = wx.AcceleratorTable([
+            (wx.ACCEL_CTRL, ord('O'), wx.ID_OPEN),
+            (wx.ACCEL_CTRL, ord('S'), wx.ID_SAVE),
+            (wx.ACCEL_CTRL, ord('Q'), wx.ID_EXIT),
+            (wx.ACCEL_NORMAL, wx.WXK_LEFT, 101),
+            (wx.ACCEL_NORMAL, wx.WXK_RIGHT, 102),
+        ])
+        self.SetAcceleratorTable(accel_tbl)
+
+    def OnPrevImage(self, event):
+        """上一张图片"""
+        if self.image_files and self.current_image_index > 0:
+            self.image_list.SetSelection(self.current_image_index - 1)
+            self.OnImageSelect(None)
+
+    def OnNextImage(self, event):
+        """下一张图片"""
+        if self.image_files and self.current_image_index < len(self.image_files) - 1:
+            self.image_list.SetSelection(self.current_image_index + 1)
+            self.OnImageSelect(None)
+
+    def OnAnnotationSelect(self, event):
+        """选择标注列表中的项目"""
+        selection = self.annotation_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            # 在画板上选中对应的标注
+            self.annotation_panel.selected_annotation_index = selection
+            self.annotation_panel.Refresh()
 
     def LoadClassesFromFile(self, folder_path):
         """从classes.txt文件加载类别"""
@@ -588,7 +925,8 @@ class YoloLabelingTool(wx.Frame):
             # 加载新图片
             if self.annotation_panel.LoadImage(image_path):
                 self.UpdateAnnotationList()
-                self.SetStatusText(f"当前图片: {os.path.basename(image_path)}")
+                self.SetStatusText(
+                    f"当前图片: {os.path.basename(image_path)} ({selection + 1}/{len(self.image_files)})")
 
     def OnSave(self, event):
         """保存当前标注"""
@@ -656,7 +994,6 @@ class YoloLabelingTool(wx.Frame):
                 self.class_list.SetSelection(selection)
                 self.OnClassSelect(None)
                 # 刷新显示
-                self.annotation_panel.CreateBackgroundBitmap()
                 self.annotation_panel.Refresh()
                 self.UpdateAnnotationList()
         dlg.Destroy()
@@ -753,7 +1090,6 @@ class YoloLabelingTool(wx.Frame):
                 self.OnClassSelect(None)
 
             # 刷新显示
-            self.annotation_panel.CreateBackgroundBitmap()
             self.annotation_panel.Refresh()
             self.UpdateAnnotationList()
         dlg.Destroy()
@@ -785,7 +1121,6 @@ class YoloLabelingTool(wx.Frame):
         self.OnClassSelect(None)
 
         # 刷新显示
-        self.annotation_panel.CreateBackgroundBitmap()
         self.annotation_panel.Refresh()
         self.UpdateAnnotationList()
 
@@ -816,7 +1151,6 @@ class YoloLabelingTool(wx.Frame):
         self.OnClassSelect(None)
 
         # 刷新显示
-        self.annotation_panel.CreateBackgroundBitmap()
         self.annotation_panel.Refresh()
         self.UpdateAnnotationList()
 
@@ -874,36 +1208,60 @@ class YoloLabelingTool(wx.Frame):
         """更新标注列表显示"""
         self.annotation_list.Clear()
         for i, ann in enumerate(self.annotation_panel.annotations):
-            if ann['class'] in self.class_names:
-                class_name = ann['class']
+            if ann['class'] < len(self.class_names):
+                class_name = self.class_names[ann['class']]
             else:
                 class_name = f"Class {ann['class']}"
             bbox = ann['bbox']
+
+            # 如果是选中的标注，添加标记
+            prefix = "► " if i == self.annotation_panel.selected_annotation_index else "  "
             self.annotation_list.Append(
-                f"{i + 1}. {class_name} ({bbox[0]:.3f}, {bbox[1]:.3f}, {bbox[2]:.3f}, {bbox[3]:.3f})")
+                f"{prefix}{i + 1}. {class_name} ({bbox[0]:.3f}, {bbox[1]:.3f}, {bbox[2]:.3f}, {bbox[3]:.3f})")
 
     def OnDeleteAnnotation(self, event):
         """删除选中的标注"""
         selection = self.annotation_list.GetSelection()
         if selection != wx.NOT_FOUND:
             del self.annotation_panel.annotations[selection]
+
+            # 更新选中索引
+            if self.annotation_panel.selected_annotation_index == selection:
+                self.annotation_panel.selected_annotation_index = -1
+            elif self.annotation_panel.selected_annotation_index > selection:
+                self.annotation_panel.selected_annotation_index -= 1
+
             self.UpdateAnnotationList()
-            # 重新创建背景缓存以移除已删除的标注
-            self.annotation_panel.CreateBackgroundBitmap()
             self.annotation_panel.Refresh()
 
     def OnExit(self, event):
         """退出程序"""
+        # 保存当前标注
+        if hasattr(self, 'annotation_panel') and self.annotation_panel.image_path:
+            self.annotation_panel.SaveAnnotations()
         self.Close()
 
     def OnAbout(self, event):
         import wx.adv
         """关于对话框"""
         info = wx.adv.AboutDialogInfo()
-        info.SetName("YOLO标注工具")
-        info.SetVersion("1.0")
+        info.SetName("YOLO标注工具 - 增强版")
+        info.SetVersion("2.0")
         info.SetDescription(
-            "用于YOLO目标检测的图片标注工具\n\n使用说明:\n1. 导入图片文件夹\n2. 选择类别\n3. 在图片上拖拽鼠标画框\n4. 右键删除标注框\n5. 保存并导出标注")
+            "用于YOLO目标检测的图片标注工具 - 增强版\n\n"
+            "新功能：\n"
+            "• 框选中和编辑：单击选中标注框\n"
+            "• 拖拽移动：选中框后可拖拽移动位置\n"
+            "• 调整大小：拖拽框的角点或边缘调整大小\n"
+            "• 键盘快捷键：Delete删除，ESC取消选择\n"
+            "• 导航快捷键：左右箭头键切换图片\n\n"
+            "使用说明:\n"
+            "1. 导入图片文件夹\n"
+            "2. 添加或选择类别\n"
+            "3. 左键拖拽创建新标注框\n"
+            "4. 单击框选中，拖拽移动或调整大小\n"
+            "5. 右键或Delete键删除标注框\n"
+            "6. 保存并导出标注")
         info.SetCopyright("(C) 2025")
 
         wx.adv.AboutBox(info)
