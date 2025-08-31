@@ -1,6 +1,7 @@
 import wx
 import os
 import ctypes
+import random
 
 
 class AnnotationPanel(wx.Panel):
@@ -33,6 +34,7 @@ class AnnotationPanel(wx.Panel):
 
         # 缓存的背景图片
         self.background_bitmap = None
+        self.class_to_color = {}
 
         self.SetBackgroundColour(wx.Colour(240, 240, 240))
 
@@ -162,7 +164,23 @@ class AnnotationPanel(wx.Panel):
 
             # 绘制当前正在画的框
             if self.current_box and self.drawing:
-                self.DrawBox(dc, self.current_box, wx.Colour(0, 255, 0), 2)
+                current_class = self.main_frame.GetCurrentClass()
+
+                if current_class < len(self.main_frame.class_names):
+                    class_name = self.main_frame.class_names[current_class]
+                else:
+                    class_name = f"Class {current_class}"
+
+                if class_name in self.class_to_color:
+                    rgb_color = self.class_to_color[class_name]
+                else:
+                    # 如果 class_name 不在预定义的颜色映射中，则随机生成一个颜色
+                    rgb_color = tuple(random.choices(range(256), k=3))
+                    # 将新生成的颜色添加到字典中
+                    self.class_to_color[class_name] = rgb_color
+                color = wx.Colour(rgb_color[0], rgb_color[1], rgb_color[2])
+
+                self.DrawBox(dc, self.current_box, color, 2)
 
         else:
             dc.Clear()
@@ -174,21 +192,35 @@ class AnnotationPanel(wx.Panel):
             x, y, w, h = self.YoloToPixel(ann['bbox'])
             box = (x, y, x + w, y + h)
 
-            # 选中的框用不同颜色
-            if i == self.selected_annotation_index:
-                color = wx.Colour(255, 0, 0)  # 红色表示选中
-                self.DrawBox(dc, box, color, 3)
-                # 绘制调整手柄
-                self.DrawResizeHandles(dc, box)
-            else:
-                color = wx.Colour(0, 0, 255)  # 蓝色表示未选中
-                self.DrawBox(dc, box, color, 2)
-
             # 绘制类别标签
             if ann['class'] < len(self.main_frame.class_names):
                 class_name = self.main_frame.class_names[ann['class']]
             else:
                 class_name = f"Class {ann['class']}"
+
+            if class_name in self.class_to_color:
+                rgb_color = self.class_to_color[class_name]
+            else:
+                # 如果 class_name 不在预定义的颜色映射中，则随机生成一个颜色
+                rgb_color = tuple(random.choices(range(256), k=3))
+                # 将新生成的颜色添加到字典中
+                self.class_to_color[class_name] = rgb_color
+            color = wx.Colour(rgb_color[0], rgb_color[1], rgb_color[2])
+
+            # 选中的框用不同颜色
+            if i == self.selected_annotation_index:
+                # 选中框：更亮的颜色和更粗的线条
+                selected_color = wx.Colour(
+                    min(255, color.Red() + 50),
+                    min(255, color.Green() + 50),
+                    min(255, color.Blue() + 50)
+                )
+                self.DrawBox(dc, box, selected_color, 3)
+                # 绘制调整手柄
+                self.DrawResizeHandles(dc, box, selected_color)
+            else:
+                self.DrawBox(dc, box, color, 2)
+
             dc.SetTextForeground(color)
             dc.DrawText(class_name, x, max(0, y - 20))
 
@@ -201,14 +233,14 @@ class AnnotationPanel(wx.Panel):
         x1, y1, x2, y2 = box
         dc.DrawRectangle(x1, y1, x2 - x1, y2 - y1)
 
-    def DrawResizeHandles(self, dc, box):
+    def DrawResizeHandles(self, dc, box, color):
         """绘制调整手柄"""
         x1, y1, x2, y2 = box
         cx = (x1 + x2) // 2
         cy = (y1 + y2) // 2
 
         # 设置手柄样式
-        dc.SetPen(wx.Pen(wx.Colour(255, 0, 0), 1))
+        dc.SetPen(wx.Pen(color, 1))
         dc.SetBrush(wx.Brush(wx.Colour(255, 255, 255)))
 
         half_size = self.handle_size // 2
