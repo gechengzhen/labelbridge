@@ -1,7 +1,6 @@
 import wx
 import os
 import ctypes
-import random
 import numpy as np
 
 
@@ -157,7 +156,6 @@ colors = Colors()  # create instance for 'from utils.plots import colors'
 class AnnotationPanel(wx.Panel):
     def __init__(self, parent, main_frame):
         super().__init__(parent)
-        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
 
         self.parent = parent
         self.main_frame = main_frame
@@ -187,6 +185,12 @@ class AnnotationPanel(wx.Panel):
 
         self.SetBackgroundColour(wx.Colour(240, 240, 240))
 
+        self.buffer = wx.Bitmap(self.GetSize().width, self.GetSize().height)  # 画布缓存
+
+        # 十字辅助线相关
+        self.show_crosshair = True  # 是否显示十字辅助线（可用界面开关）
+        self.cross_pos = None  # 当前鼠标位置（wx.Point），用于画十字
+
         # 绑定事件
         self.Bind(wx.EVT_PAINT, self.OnPaint)
         self.Bind(wx.EVT_LEFT_DOWN, self.OnLeftDown)
@@ -206,10 +210,12 @@ class AnnotationPanel(wx.Panel):
             self.image = wx.Image(image_path)
             self.image_size = (self.image.GetWidth(), self.image.GetHeight())
             self.FitImageToPanel()
+            size = self.GetClientSize()
+            self.buffer = wx.Bitmap(size.width, size.height)
             self.LoadAnnotations()
             self.CreateBackgroundBitmap()
             self.selected_annotation_index = -1  # 重置选择
-            self.Refresh()
+            self.Refresh(False)  # 刷新，不擦背景，减少闪烁
             return True
         except Exception as e:
             wx.MessageBox(f"无法加载图片: {str(e)}", "错误", wx.OK | wx.ICON_ERROR)
@@ -241,6 +247,7 @@ class AnnotationPanel(wx.Panel):
 
     def CreateBackgroundBitmap(self):
         """创建背景图片缓存"""
+        print("CreateBackgroundBitmap")
         if not self.image:
             return
 
@@ -296,13 +303,16 @@ class AnnotationPanel(wx.Panel):
     def OnSize(self, event):
         """面板大小改变事件"""
         if self.image:
+            size = self.GetClientSize()
+            self.buffer = wx.Bitmap(size.width, size.height)
             self.FitImageToPanel()
-            self.Refresh()
+            self.Refresh(False)  # 刷新，不擦背景，减少闪烁
         event.Skip()
 
-    def OnPaint(self, event):
-        """绘制事件"""
-        dc = wx.BufferedPaintDC(self)
+    def DrawToBuffer(self):
+        """在内存 bitmap 上绘制内容"""
+        dc = wx.MemoryDC(self.buffer)  # 绘制到缓存位图
+        dc.SetBackground(wx.Brush(self.GetBackgroundColour()))
 
         if self.background_bitmap:
             # 绘制缓存的背景图片
@@ -317,9 +327,46 @@ class AnnotationPanel(wx.Panel):
                 rgb_color = colors(current_class)
                 color = wx.Colour(rgb_color[0], rgb_color[1], rgb_color[2])
                 self.DrawBox(dc, self.current_box, color, 2)
-
+            # 绘制十字（在最后，覆盖在其它内容之上）
+            if self.show_crosshair and self.cross_pos:
+                # 鼠标十字（颜色：浅灰）
+                self.DrawCrosshair(dc, self.cross_pos, wx.Colour(0, 255, 0), style=wx.PENSTYLE_DOT)
         else:
             dc.Clear()
+            pass
+
+        dc.SelectObject(wx.NullBitmap)  # 解除绑定
+
+    def OnPaint(self, event):
+        # 显示缓存位图
+        self.DrawToBuffer()
+        dc = wx.PaintDC(self)
+        dc.DrawBitmap(self.buffer, 0, 0)
+
+    # def OnPaint(self, event):
+    #     """绘制事件"""
+    #     dc = wx.BufferedPaintDC(self)
+    #     # dc = wx.PaintDC(self)
+
+    #     if self.background_bitmap:
+    #         # 绘制缓存的背景图片
+    #         dc.DrawBitmap(self.background_bitmap, 0, 0)
+
+    #         # 绘制所有标注框
+    #         self.DrawAllAnnotations(dc)
+
+    #         # 绘制当前正在画的框
+    #         if self.current_box and self.drawing:
+    #             current_class = self.main_frame.GetCurrentClass()
+    #             rgb_color = colors(current_class)
+    #             color = wx.Colour(rgb_color[0], rgb_color[1], rgb_color[2])
+    #             self.DrawBox(dc, self.current_box, color, 2)
+    #         # 绘制十字（在最后，覆盖在其它内容之上）
+    #         if self.show_crosshair and self.cross_pos:
+    #             # 鼠标十字（颜色：浅灰）
+    #             self.DrawCrosshair(dc, self.cross_pos, wx.Colour(0, 255, 0), style=wx.PENSTYLE_DOT)
+    #     else:
+    #         dc.Clear()
 
     def DrawAllAnnotations(self, dc):
         """绘制所有标注框"""
@@ -386,6 +433,39 @@ class AnnotationPanel(wx.Panel):
 
         for hx, hy in handles:
             dc.DrawRectangle(hx, hy, self.handle_size, self.handle_size)
+
+    def DrawCrosshair(self, dc, pos, color=wx.Colour(200, 200, 200), style=wx.PENSTYLE_DOT):
+        """
+        在图片区域绘制十字（水平 + 垂直线）。pos: wx.Point（面板坐标）。
+        style: wx pen style 如 wx.PENSTYLE_DOT, wx.PENSTYLE_SHORT_DASH 等。
+        """
+        if not self.image:
+            return
+
+        # 计算图片显示的边界（面板坐标）
+        img_x1 = int(self.offset_x)
+        img_y1 = int(self.offset_y)
+        img_x2 = int(self.offset_x + self.image_size[0] * self.scale_factor)
+        img_y2 = int(self.offset_y + self.image_size[1] * self.scale_factor)
+
+        # 限制 pos 在图片范围内
+        px = max(img_x1, min(img_x2, pos.x))
+        py = max(img_y1, min(img_y2, pos.y))
+
+        # 画线（水平 + 垂直），使用虚线或点线
+        pen = wx.Pen(color, 3, style)
+        dc.SetPen(pen)
+
+        # 有时候画整条线会穿过 UI 元素，会显得突兀，可以只画在图片内：
+        dc.DrawLine(px, img_y1, px, img_y2)  # 垂直线：x 固定，y 从 img_y1 到 img_y2
+        dc.DrawLine(img_x1, py, img_x2, py)  # 水平线：y 固定，x 从 img_x1 到 img_x2
+
+        # 画一个小十字中心点（便于视觉对齐）
+        small_pen = wx.Pen(color, 5)
+        dc.SetPen(small_pen)
+        s = 7
+        dc.DrawLine(px - s, py, px + s, py)
+        dc.DrawLine(px, py - s, px, py + s)
 
     def GetResizeHandle(self, pos, box):
         """获取鼠标位置对应的调整手柄"""
@@ -459,7 +539,7 @@ class AnnotationPanel(wx.Panel):
             else:
                 # 选中新的框
                 self.selected_annotation_index = clicked_index
-                self.Refresh()
+                self.Refresh(False)  # 刷新，不擦背景，减少闪烁
         else:
             # 取消选择，开始画新框
             self.selected_annotation_index = -1
@@ -482,7 +562,7 @@ class AnnotationPanel(wx.Panel):
             clamped_pos = self.ClampPositionToImage(pos)
             self.start_pos = clamped_pos
             self.current_box = (clamped_pos.x, clamped_pos.y, clamped_pos.x, clamped_pos.y)
-            self.Refresh()
+            self.Refresh(False)  # 刷新，不擦背景，减少闪烁
 
     def OnLeftUp(self, event):
         """鼠标左键释放"""
@@ -526,11 +606,17 @@ class AnnotationPanel(wx.Panel):
                     self.selected_annotation_index = len(self.annotations) - 1
 
                 self.current_box = None
-                self.Refresh()
+            self.Refresh(False)  # 刷新，不擦背景，减少闪烁
 
     def OnMouseMove(self, event):
         """鼠标移动"""
         pos = event.GetPosition()
+
+        # 每次移动都更新 cross_pos（但限制到图片区域）
+        if self.image and self.IsInImageArea(pos):
+            self.cross_pos = self.ClampPositionToImage(pos)
+        else:
+            self.cross_pos = None
 
         if self.editing_mode == 'move' and self.selected_annotation_index >= 0:
             # 移动标注框
@@ -554,22 +640,24 @@ class AnnotationPanel(wx.Panel):
 
             self.annotations[self.selected_annotation_index]['bbox'] = new_bbox
             self.main_frame.UpdateAnnotationList()
-            self.Refresh()
+            self.Refresh(False)  # 刷新，不擦背景，减少闪烁
 
         elif self.editing_mode == 'resize' and self.selected_annotation_index >= 0:
             # 调整标注框大小
             self.ResizeAnnotation(pos)
             self.main_frame.UpdateAnnotationList()
-            self.Refresh()
+            self.Refresh(False)  # 刷新，不擦背景，减少闪烁
 
         elif self.drawing and self.start_pos:
             # 画新框
             clamped_pos = self.ClampPositionToImage(pos)
             self.current_box = (self.start_pos.x, self.start_pos.y, clamped_pos.x, clamped_pos.y)
-            self.Refresh()
+            self.Refresh(False)  # 刷新，不擦背景，减少闪烁
         else:
             # 更新鼠标光标
             self.UpdateCursor(pos)
+
+        self.Refresh(False)  # 刷新，不擦背景，减少闪烁
 
     def ResizeAnnotation(self, pos):
         """调整标注框大小"""
@@ -652,7 +740,8 @@ class AnnotationPanel(wx.Panel):
                 return
 
         # 默认光标
-        self.SetCursor(wx.Cursor(wx.CURSOR_DEFAULT))
+        self.SetCursor(wx.Cursor(wx.CURSOR_BLANK))
+        # self.SetCursor(wx.Cursor(wx.CURSOR_DEFAULT))
 
     def OnKeyDown(self, event):
         """键盘事件"""
@@ -664,14 +753,14 @@ class AnnotationPanel(wx.Panel):
                 del self.annotations[self.selected_annotation_index]
                 self.selected_annotation_index = -1
                 self.main_frame.UpdateAnnotationList()
-                self.Refresh()
+                self.Refresh(False)  # 刷新，不擦背景，减少闪烁
         elif key_code == wx.WXK_ESCAPE:
             # 取消选择
             self.selected_annotation_index = -1
             self.drawing = False
             self.current_box = None
             self.editing_mode = None
-            self.Refresh()
+            self.Refresh(False)  # 刷新，不擦背景，减少闪烁
 
         event.Skip()
 
@@ -690,7 +779,7 @@ class AnnotationPanel(wx.Panel):
             elif self.selected_annotation_index > clicked_index:
                 self.selected_annotation_index -= 1
             self.main_frame.UpdateAnnotationList()
-            self.Refresh()
+            self.Refresh(False)  # 刷新，不擦背景，减少闪烁
 
     def IsInImageArea(self, pos):
         """检查位置是否在图片区域内"""
@@ -767,6 +856,7 @@ class AnnotationPanel(wx.Panel):
 
     def SaveAnnotations(self):
         """保存标注文件"""
+        print("SaveAnnotations")
         if not self.image_path:
             return
 
@@ -830,23 +920,6 @@ class YoloLabelingTool(wx.Frame):
         file_sizer.Add(export_btn, 0, wx.EXPAND | wx.ALL, 5)
 
         left_sizer.Add(file_sizer, 0, wx.EXPAND | wx.ALL, 5)
-
-        # 操作提示
-        help_box = wx.StaticBox(left_panel, label="操作提示")
-        help_sizer = wx.StaticBoxSizer(help_box, wx.VERTICAL)
-
-        help_text = wx.StaticText(left_panel, label=
-        "• 左键拖拽：创建新框\n"
-        "• 单击框：选中标注\n"
-        "• 拖拽框：移动标注\n"
-        "• 拖拽角点/边：调整大小\n"
-        "• 右键框：删除标注\n"
-        "• Delete键：删除选中标注\n"
-        "• ESC键：取消选择")
-        help_text.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-        help_sizer.Add(help_text, 0, wx.EXPAND | wx.ALL, 5)
-
-        left_sizer.Add(help_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # 图片列表
         list_box = wx.StaticBox(left_panel, label="图片列表")
@@ -1420,7 +1493,15 @@ class YoloLabelingTool(wx.Frame):
             "3. 左键拖拽创建新标注框\n"
             "4. 单击框选中，拖拽移动或调整大小\n"
             "5. 右键或Delete键删除标注框\n"
-            "6. 保存并导出标注")
+            "6. 保存并导出标注\n"
+            "• 左键拖拽：创建新框\n"
+            "• 单击框：选中标注\n"
+            "• 拖拽框：移动标注\n"
+            "• 拖拽角点/边：调整大小\n"
+            "• 右键框：删除标注\n"
+            "• Delete键：删除选中标注\n"
+            "• ESC键：取消选择"
+        )
         info.SetCopyright("(C) 2025")
 
         wx.adv.AboutBox(info)
