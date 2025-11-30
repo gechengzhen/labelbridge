@@ -3,7 +3,7 @@ import os
 import ctypes
 import numpy as np
 import math
-import time
+import sys
 
 
 class Colors:
@@ -206,11 +206,33 @@ class AnnotationPanel(wx.Panel):
         self.Bind(wx.EVT_PAINT, self.OnPaint)
         self.Bind(wx.EVT_LEFT_DOWN, self.OnLeftDown)
         self.Bind(wx.EVT_LEFT_UP, self.OnLeftUp)
-        self.Bind(wx.EVT_MOTION, self.OnMouseMove)
         self.Bind(wx.EVT_RIGHT_DOWN, self.OnRightDown)
+        self.Bind(wx.EVT_RIGHT_UP, self.OnRightUp)
         self.Bind(wx.EVT_SIZE, self.OnSize)
         self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
+        self.Bind(wx.EVT_MOTION, self.OnMouseMove)
         self.Bind(wx.EVT_ENTER_WINDOW, self.OnMouseEnter)
+
+        # 把 offset_x/offset_y 定义改为 float（替换原来的 int 初始化）
+        self.scale_factor = 1.0
+        self.offset_x = 0.0
+        self.offset_y = 0.0
+
+        # 平移（中键拖动）相关
+        self.panning = False
+        self.pan_last_pos = None
+
+        # 缓存一个缩放后的 bitmap（不包含偏移）
+        self.scaled_bitmap = None
+
+        # 调节角度相关
+        self.adjusting = False
+
+        # 绑定鼠标滚轮和中键事件（你原来绑定了 EVT_MOTION 等，这里补充）
+        self.Bind(wx.EVT_MOUSEWHEEL, self.OnMouseWheel)
+        self.Bind(wx.EVT_MIDDLE_DOWN, self.OnMiddleDown)
+        self.Bind(wx.EVT_MIDDLE_UP, self.OnMiddleUp)
+        self.Bind(wx.EVT_LEAVE_WINDOW, self.OnMouseLeave)  # 防止 capture 卡死
 
         try:
             hwnd = self.GetHandle()
@@ -258,45 +280,129 @@ class AnnotationPanel(wx.Panel):
         scaled_height = self.image_size[1] * self.scale_factor
         self.offset_x = (panel_size.width - scaled_width) // 2
         self.offset_y = (panel_size.height - scaled_height) // 2
+        print("FitImageToPanel")
+
+        # self.UpdateScaledBitmap()
+        # self.ClampOffset()
 
         # 重新创建背景图片缓存
         if self.image:
             self.CreateBackgroundBitmap()
 
-    def CreateBackgroundBitmap(self):
-        """创建背景图片缓存"""
-        print("CreateBackgroundBitmap")
+    def UpdateScaledBitmap(self):
+        """根据 self.scale_factor 生成并缓存缩放后的 bitmap（不包含偏移）。"""
         if not self.image:
+            self.scaled_bitmap = None
             return
 
-        panel_size = self.GetSize()
-        if panel_size.width <= 0 or panel_size.height <= 0:
-            return
+        pw, ph = self.GetClientSize().width, self.GetClientSize().height
 
-        # 创建背景缓存位图
-        self.background_bitmap = wx.Bitmap(panel_size.width, panel_size.height)
+        # 原图像像素大小
+        img_w, img_h = self.image.GetWidth(), self.image.GetHeight()
 
-        # 在背景位图上绘制图片
-        dc = wx.MemoryDC()
-        dc.SelectObject(self.background_bitmap)
-        dc.SetBackground(wx.Brush(wx.Colour(240, 240, 240)))
-        dc.Clear()
+        # 放大后整张图像尺寸（像素）
+        full_scaled_w = round(img_w * self.scale_factor)
+        full_scaled_h = round(img_h * self.scale_factor)
 
-        # 计算缩放后的尺寸，确保至少为1
-        scaled_width = max(1, int(self.image_size[0] * self.scale_factor))
-        scaled_height = max(1, int(self.image_size[1] * self.scale_factor))
+        # 一个可调阈值：如果整张图缩放后不比面板大很多，就直接缩整张图。
+        # ratio = allowed / 面板；例如 1.2 表示放大后宽高都 <= 1.2 * 面板尺寸时直接缩整张。
+        full_image_ratio = getattr(self, "full_image_ratio", 2)
 
-        # 只有当缩放后的尺寸足够大时才绘制图片
-        if scaled_width > 1 and scaled_height > 1:
-            try:
-                # 绘制缩放后的图片
-                scaled_image = self.image.Scale(scaled_width, scaled_height)
-                bitmap = wx.Bitmap(scaled_image)
-                dc.DrawBitmap(bitmap, int(self.offset_x), int(self.offset_y))
-            except Exception as e:
-                print(f"绘制图片时出错: {e}")
+        try:
+            key = ("full", self.scale_factor, img_w, img_h)
 
-        dc.SelectObject(wx.NullBitmap)
+            if getattr(self, "_last_scaled_key", None) == key and getattr(self, "scaled_bitmap", None):
+                return
+
+            # 当整张图缩放后在面板上不比面板大很多 -> 缩整张图
+            if full_scaled_w <= round(pw * full_image_ratio) and full_scaled_h <= round(ph * full_image_ratio):
+                # 目标尺寸至少为1
+                tw = max(1, full_scaled_w)
+                th = max(1, full_scaled_h)
+                # 直接对整张图做 Scale
+                scaled_img = self.image.Scale(tw, th, wx.IMAGE_QUALITY_NEAREST)
+                self.scaled_bitmap = wx.Bitmap(scaled_img)
+                self._last_scaled_key = key
+                self._scaled_is_full = True
+                print("UpdateScaledBitmap: 缩整张图")
+                return
+            key = (
+                "sub",
+                self.scale_factor,
+                img_w, img_h,
+                pw, ph,
+                round(self.offset_x), round(self.offset_y)
+            )
+
+            if getattr(self, "_last_scaled_key", None) == key and getattr(self, "scaled_bitmap", None):
+                return
+            image_rect = wx.Rect(0, 0, self.image.GetWidth(), self.image.GetHeight())
+            selection_rect = wx.Rect(round(-self.offset_x / self.scale_factor),
+                                     round(-self.offset_y / self.scale_factor),
+                                     round(pw / self.scale_factor), round(ph / self.scale_factor))
+            valid_rect = selection_rect.Intersect(image_rect)
+            sub = self.image.GetSubImage(valid_rect)
+            # 缩放这块到屏幕像素大小（近似为 vis_w * scale_factor）
+            target_w = min(round(self.image.GetWidth() * self.scale_factor), round(pw), round(pw - self.offset_x),
+                           round(self.image.GetWidth() * self.scale_factor + self.offset_x))
+            target_h = min(round(self.image.GetHeight() * self.scale_factor), round(ph), round(ph - self.offset_y),
+                           round(self.image.GetHeight() * self.scale_factor + self.offset_y))
+
+            # 使用最近邻以保持像素感并提高速度
+            scaled_sub = sub.Scale(target_w, target_h, wx.IMAGE_QUALITY_NEAREST)
+            self.scaled_bitmap = wx.Bitmap(scaled_sub)
+            self._last_scaled_key = key
+            self._scaled_is_full = False
+
+        except Exception as e:
+            print("UpdateScaledBitmap 缩放出错:", e)
+            self.scaled_bitmap = None
+            self.scaled_bitmap = None
+            self._last_scaled_key = None
+            self._scaled_is_full = False
+
+    def CreateBackgroundBitmap(self):
+        """
+        兼容旧接口：不再把图片烙进 panel 大小的 bitmap 中。
+        改为更新 scaled_bitmap（用于绘制），方便平移时只需改变 offset。
+        """
+        # 现在 CreateBackgroundBitmap 的职责变为：确保 scaled_bitmap 就绪
+        self.UpdateScaledBitmap()
+
+    # def CreateBackgroundBitmap(self):
+    #     """创建背景图片缓存"""
+    #     print("CreateBackgroundBitmap")
+    #     if not self.image:
+    #         return
+
+    #     panel_size = self.GetSize()
+    #     if panel_size.width <= 0 or panel_size.height <= 0:
+    #         return
+
+    #     # 创建背景缓存位图
+    #     self.background_bitmap = wx.Bitmap(panel_size.width, panel_size.height)
+
+    #     # 在背景位图上绘制图片
+    #     dc = wx.MemoryDC()
+    #     dc.SelectObject(self.background_bitmap)
+    #     dc.SetBackground(wx.Brush(wx.Colour(240, 240, 240)))
+    #     dc.Clear()
+
+    #     # 计算缩放后的尺寸，确保至少为1
+    #     scaled_width = max(1, int(self.image_size[0] * self.scale_factor))
+    #     scaled_height = max(1, int(self.image_size[1] * self.scale_factor))
+
+    #     # 只有当缩放后的尺寸足够大时才绘制图片
+    #     if scaled_width > 1 and scaled_height > 1:
+    #         try:
+    #             # 绘制缩放后的图片
+    #             scaled_image = self.image.Scale(scaled_width, scaled_height)
+    #             bitmap = wx.Bitmap(scaled_image)
+    #             dc.DrawBitmap(bitmap, int(self.offset_x), int(self.offset_y))
+    #         except Exception as e:
+    #             print(f"绘制图片时出错: {e}")
+
+    #     dc.SelectObject(wx.NullBitmap)
 
     def ClampPositionToImage(self, pos):
         """将位置限制在图片区域内"""
@@ -331,10 +437,19 @@ class AnnotationPanel(wx.Panel):
         """在内存 bitmap 上绘制内容"""
         dc = wx.MemoryDC(self.buffer)  # 绘制到缓存位图
         dc.SetBackground(wx.Brush(self.GetBackgroundColour()))
+        dc.Clear()
 
-        if self.background_bitmap:
-            # 绘制缓存的背景图片
-            dc.DrawBitmap(self.background_bitmap, 0, 0)
+        if getattr(self, "scaled_bitmap", None):
+            if getattr(self, "_scaled_is_full", False):
+                # 整张图模式
+                dc.DrawBitmap(self.scaled_bitmap, round(self.offset_x), round(self.offset_y))
+            else:
+                # 局部裁剪模式
+                x = max(0, round(self.offset_x))
+                y = max(0, round(self.offset_y))
+                dc.DrawBitmap(self.scaled_bitmap, x, y)
+            # # 绘制缓存的背景图片
+            # dc.DrawBitmap(self.background_bitmap, 0, 0)
 
             # 绘制所有标注框
             self.DrawAllAnnotations(dc)
@@ -365,9 +480,16 @@ class AnnotationPanel(wx.Panel):
 
     def OnPaint(self, event):
         # 显示缓存位图
+        # tracer = VizTracer()
+        # tracer.start()
+        if getattr(self, "panning", False):
+            self.CreateBackgroundBitmap()
         self.DrawToBuffer()
         dc = wx.PaintDC(self)
         dc.DrawBitmap(self.buffer, 0, 0)
+        print("OnPaint")
+        # tracer.stop()
+        # tracer.save()
 
     # def OnPaint(self, event):
     #     """绘制事件"""
@@ -504,24 +626,13 @@ class AnnotationPanel(wx.Panel):
 
     def DrawObbBox(self, dc, box, color, width=2):
         """根据角度绘制旋转矩形，从 start_pos 到 end_pos"""
-        gdc = wx.GCDC(dc)
-
-        # pen = wx.Pen(color, width, wx.PENSTYLE_SOLID)
-        # brush = wx.Brush(wx.Colour(color[0], color[1], color[2], 100))  # 半透明白
-
-        # gdc.SetPen(pen)
-        # gdc.SetBrush(brush)
-        pen = wx.Pen(color, width)
-        gdc.SetPen(pen)
-        gdc.SetBrush(wx.Brush(color, wx.BRUSHSTYLE_TRANSPARENT))
-
-        # cx, cy, x2, y2 = box
-
-        # rotated_pts = self.rectangle_corners_from_diagonal((cx, cy), (x2, y2), angle)
-        rotated_pts = box
-        # print(rotated_pts)
-        # dc.DrawPolygon([wx.Point(int(x), int(y)) for x, y in rotated_pts])
-        gdc.DrawPolygon([wx.Point(round(x), round(y)) for x, y in zip(rotated_pts[::2], rotated_pts[1::2])])
+        gc = wx.GraphicsContext.Create(dc)
+        gc.SetPen(wx.Pen(color, width))
+        gc.SetBrush(wx.Brush(wx.Colour(color[0], color[1], color[2], 50)))
+        # 准备多边形点
+        points = [wx.Point2D(x, y) for x, y in zip(box[::2], box[1::2])]
+        # 绘制多边形
+        gc.DrawLines(points + [points[0]])  # 添加第一个点到最后以闭合图形
 
     def DrawResizeHandles(self, dc, box, color):
         """绘制调整手柄"""
@@ -554,15 +665,10 @@ class AnnotationPanel(wx.Panel):
         """绘制有向边界框的旋转调整手柄（自动获取角度）"""
 
         gdc = wx.GCDC(dc)
-        pen = wx.Pen(wx.Colour(0, 120, 215), 1, wx.PENSTYLE_SOLID)
-        brush = wx.Brush(wx.Colour(255, 255, 255, 200))  # 半透明白
+        pen = wx.Pen(wx.Colour(color[0], color[1], color[2]), 1, wx.PENSTYLE_SOLID)
+        brush = wx.Brush(wx.Colour(255, 255, 255, 255))
         gdc.SetPen(pen)
         gdc.SetBrush(brush)
-        # gdc.SetPen(wx.Pen(color, 1))
-        # gdc.SetBrush(wx.Brush(wx.Colour(255, 255, 255)))
-
-        # dc.SetPen(wx.Pen(color, 1))
-        # dc.SetBrush(wx.Brush(wx.Colour(255, 255, 255)))
 
         half_handle_size = self.handle_size / 2
 
@@ -716,9 +822,8 @@ class AnnotationPanel(wx.Panel):
             angle_deg=0.0
     ):
         """
-        在图片区域绘制十字辅助线。
-        普通模式：水平+垂直；
-        OBB 模式：绕中心点旋转 angle_deg。
+        在图片区域绘制十字辅助线（支持旋转）。
+        使用 GraphicsContext 实现平滑抗锯齿。
         """
         if not self.image:
             return
@@ -733,23 +838,58 @@ class AnnotationPanel(wx.Panel):
         px = max(img_x1, min(img_x2, pos.x))
         py = max(img_y1, min(img_y2, pos.y))
 
-        (a1, a2), (b1, b2) = self.cross_segment_endpoints(img_x1, img_y1, img_x2, img_y2, px, py, angle_deg)
+        (a1, a2), (b1, b2) = self.cross_segment_endpoints(
+            img_x1, img_y1, img_x2, img_y2, px, py, angle_deg
+        )
 
-        # 设置画笔
-        pen = wx.Pen(color, 2)
-        gdc = wx.GCDC(dc)
-        gdc.SetPen(pen)
+        # --- GraphicsContext ---
+        gc = wx.GraphicsContext.Create(dc)
+
+        gc.SetAntialiasMode(wx.ANTIALIAS_DEFAULT)
+
+        # ---- 主十字线条 ----
+        pen_info = wx.GraphicsPenInfo(color).Width(2)
+
+        gc.SetPen(gc.CreatePen(pen_info))
 
         # 绘制两条旋转线
-        gdc.DrawLine(int(a1[0]), int(a1[1]), int(a2[0]), int(a2[1]))
-        gdc.DrawLine(int(b1[0]), int(b1[1]), int(b2[0]), int(b2[1]))
+        gc.StrokeLine(a1[0], a1[1], a2[0], a2[1])
+        gc.StrokeLine(b1[0], b1[1], b2[0], b2[1])
 
-        # 中心点小十字
-        small_pen = wx.Pen(color, 5)
-        gdc.SetPen(small_pen)
+        # ---- 中心点小十字（总是实线）----
+        small_pen = gc.CreatePen(wx.GraphicsPenInfo(color).Width(4))
+        gc.SetPen(small_pen)
+
         s = 6
-        gdc.DrawLine(px - s, py, px + s, py)
-        gdc.DrawLine(px, py - s, px, py + s)
+        gc.StrokeLine(px - s, py, px + s, py)
+        gc.StrokeLine(px, py - s, px, py + s)
+        if self.main_frame.mode == "YOLO-OBB" and getattr(self, "adjusting", False):
+            self.DrawAnchor(gc, self.adjust_last_pos[0], self.adjust_last_pos[1])
+
+    def DrawAnchor(self, gc, x, y, outer_radius=6, inner_radius=3):
+        """
+        使用 wx.GraphicsContext 绘制一个绿色锚点（外围绿色圆，中间白色）
+        """
+        # 抗锯齿
+        gc.SetAntialiasMode(wx.ANTIALIAS_DEFAULT)
+
+        # ---- 外圆（绿色） ----
+        outer_brush = gc.CreateBrush(wx.Brush(wx.Colour(0, 255, 0)))  # 亮绿色
+        outer_pen = gc.CreatePen(wx.Pen(wx.Colour(0, 255, 0), 1))
+
+        gc.SetBrush(outer_brush)
+        gc.SetPen(outer_pen)
+        gc.DrawEllipse(x - outer_radius, y - outer_radius,
+                       outer_radius * 2, outer_radius * 2)
+
+        # ---- 内圆（白色） ----
+        inner_brush = gc.CreateBrush(wx.Brush(wx.Colour(255, 255, 255)))
+        inner_pen = gc.CreatePen(wx.Pen(wx.Colour(255, 255, 255), 1))
+
+        gc.SetBrush(inner_brush)
+        gc.SetPen(inner_pen)
+        gc.DrawEllipse(x - inner_radius, y - inner_radius,
+                       inner_radius * 2, inner_radius * 2)
 
     def GetResizeHandle(self, pos, box):
         """获取鼠标位置对应的调整手柄"""
@@ -970,9 +1110,140 @@ class AnnotationPanel(wx.Panel):
                 self.current_box = None
             self.Refresh(False)  # 刷新，不擦背景，减少闪烁
 
+    def ClampOffset(self):
+        """
+        保证图片不会被拖得完全离开面板视野：
+        - 如果图片比 panel 小，则保持居中
+        - 如果图片比 panel 大，则允许拖动但不能把图片整张移出（即至少有一像素可见）
+        """
+        if not self.scaled_bitmap:
+            return
+
+        sw = self.scaled_bitmap.GetWidth()
+        sh = self.scaled_bitmap.GetHeight()
+        pw, ph = self.GetClientSize().width, self.GetClientSize().height
+
+        if sw <= pw:
+            min_x = max_x = (pw - sw) / 2.0
+        else:
+            min_x = pw - sw
+            max_x = 0.0
+
+        if sh <= ph:
+            min_y = max_y = (ph - sh) / 2.0
+        else:
+            min_y = ph - sh
+            max_y = 0.0
+
+        # clamp
+        # self.offset_x = max(min_x, min(max_x, self.offset_x))
+        # self.offset_y = max(min_y, min(max_y, self.offset_y))
+
+    def OnMouseWheel(self, event):
+        """Ctrl + 滚轮 缩放（以鼠标为中心）"""
+        if not self.image:
+            return
+
+        if not event.ControlDown():
+            return  # 你可以改成不按 ctrl 时滚动页面行为
+
+        rotation = event.GetWheelRotation()
+        # 简单做法：正/负决定放大或缩小
+        zoom_step = 1.1 if rotation > 0 else (1.0 / 1.1)
+
+        old_scale = self.scale_factor
+        new_scale = max(0.05, min(20.0, old_scale * zoom_step))
+        if abs(new_scale - old_scale) < 1e-9:
+            return
+
+        mouse = event.GetPosition()  # 鼠标在 panel 坐标系
+        ratio = new_scale / old_scale
+
+        # 保持鼠标处为缩放中心
+        self.offset_x = mouse.x - (mouse.x - self.offset_x) * ratio
+        self.offset_y = mouse.y - (mouse.y - self.offset_y) * ratio
+
+        self.scale_factor = new_scale
+        self.UpdateScaledBitmap()
+        self.ClampOffset()
+        self.Refresh(False)
+
+    def OnMiddleDown(self, event):
+        """开始平移"""
+        if not self.image:
+            return
+        self.panning = True
+        self.pan_last_pos = event.GetPosition()
+        try:
+            self.CaptureMouse()
+        except Exception:
+            pass
+        # 改变光标为抓手
+        self.SetCursor(wx.Cursor(wx.CURSOR_SIZING))
+
+    def OnMiddleUp(self, event):
+        """结束平移"""
+        if self.panning:
+            self.panning = False
+            self.pan_last_pos = None
+            try:
+                if self.HasCapture():
+                    self.ReleaseMouse()
+            except Exception:
+                pass
+            # 恢复默认光标
+            self.SetCursor(wx.NullCursor)
+            # 最后 clamp 并刷新
+            self.ClampOffset()
+            self.Refresh(False)
+
+    def OnMouseLeave(self, event):
+        """防止 mouse capture 卡死（离开时释放）"""
+        if self.panning:
+            self.panning = False
+            try:
+                if self.HasCapture():
+                    self.ReleaseMouse()
+            except Exception:
+                pass
+            self.SetCursor(wx.NullCursor)
+            self.pan_last_pos = None
+            self.Refresh(False)
+
+        if self.adjusting:
+            self.adjusting = False
+            try:
+                if self.HasCapture():
+                    self.ReleaseMouse()
+            except Exception:
+                pass
+            self.SetCursor(wx.NullCursor)
+            self.adjust_last_pos = None
+            self.Refresh(False)
+
     def OnMouseMove(self, event):
         """鼠标移动"""
         pos = event.GetPosition()
+
+        if getattr(self, "panning", False):
+            pos = event.GetPosition()
+            dx = pos.x - self.pan_last_pos.x
+            dy = pos.y - self.pan_last_pos.y
+            # 直接移动 offset（float）
+            self.offset_x += dx
+            self.offset_y += dy
+            self.pan_last_pos = pos
+            # 不需要重建 scaled_bitmap，仅刷新绘制位置
+            # self.UpdateScaledBitmap()
+            # self.ClampOffset()
+            self.Refresh(False)
+            print("panning")
+            print(pos)
+
+        if self.main_frame.mode == "YOLO-OBB" and getattr(self, "adjusting", False):
+            pos = event.GetPosition()
+            self.cross_angle = math.degrees(
+                math.atan2(pos.y - self.adjust_last_pos.y, pos.x - self.adjust_last_pos.x))  # 注意顺序是 (y, x)
 
         # 每次移动都更新 cross_pos（但限制到图片区域）
         if self.image and self.IsInImageArea(pos):
@@ -1304,6 +1575,9 @@ class AnnotationPanel(wx.Panel):
                     # 在选中框内，设置移动光标
                     self.SetCursor(wx.Cursor(wx.CURSOR_SIZING))
                     return
+        if getattr(self, "panning", False):
+            self.SetCursor(wx.Cursor(wx.CURSOR_SIZING))
+            return
 
         # 默认光标
         self.SetCursor(wx.Cursor(wx.CURSOR_BLANK))
@@ -1352,23 +1626,26 @@ class AnnotationPanel(wx.Panel):
         event.Skip()
 
     def OnRightDown(self, event):
-        """右键删除标注"""
-        if not self.image:
-            return
+        """右键调节角度"""
+        self.adjusting = True
+        self.adjust_last_pos = event.GetPosition()
+        try:
+            self.CaptureMouse()
+        except Exception:
+            pass
 
-        pos = event.GetPosition()
-        # 查找点击位置的标注
-        clicked_index = self.GetAnnotationAt(pos)
-        print(f"右键点击位置的标注索引: {clicked_index}")
-        if clicked_index >= 0:
-
-            del self.annotations[clicked_index]
-            if self.selected_annotation_index == clicked_index:
-                self.selected_annotation_index = -1
-            elif self.selected_annotation_index > clicked_index:
-                self.selected_annotation_index -= 1
-            self.main_frame.UpdateAnnotationList()
-            self.Refresh(False)  # 刷新，不擦背景，减少闪烁
+    def OnRightUp(self, event):
+        """结束调节角度"""
+        if self.adjusting:
+            self.adjusting = False
+            try:
+                if self.HasCapture():
+                    self.ReleaseMouse()
+            except Exception:
+                pass
+            self.SetCursor(wx.NullCursor)
+            self.adjust_last_pos = None
+            self.Refresh(False)
 
     def IsInImageArea(self, pos):
         """检查位置是否在图片区域内"""
@@ -1539,7 +1816,7 @@ class AnnotationPanel(wx.Panel):
 
 class YoloLabelingTool(wx.Frame):
     def __init__(self):
-        super().__init__(None, title="YOLO标注工具 - 增强版", size=wx.Size(1200, 800))
+        super().__init__(None, title="labelbridge", size=wx.Size(1200, 800))
 
         self.image_list = None
         self.current_class_label = None
@@ -2016,6 +2293,8 @@ class YoloLabelingTool(wx.Frame):
                 self.class_list.SetSelection(new_selection)
                 self.OnClassSelect(None)
 
+            self.annotation_panel.selected_annotation_index = -1
+
             # 刷新显示
             self.annotation_panel.Refresh()
             self.UpdateAnnotationList()
@@ -2184,7 +2463,7 @@ class YoloLabelingTool(wx.Frame):
 
     def OnDeleteAnnotation(self, event):
         """删除选中的标注"""
-        selection = self.annotation_list.GetSelection()
+        selection = self.annotation_list.GetFirstSelected()  # ← 改这里
         if selection != wx.NOT_FOUND:
             del self.annotation_panel.annotations[selection]
 
@@ -2259,9 +2538,10 @@ class YoloApp(wx.App):
 
 if __name__ == '__main__':
     # 设置 DPI 感知
-    try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)  # 1: 系统 DPI 感知, 2: 每个监视器 DPI 感知
-    except Exception:
-        ctypes.windll.user32.SetProcessDPIAware()  # 备用方法
+    if sys.platform.startswith('win'):
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)  # 1: 系统 DPI 感知, 2: 每个监视器 DPI 感知
+        except Exception:
+            ctypes.windll.user32.SetProcessDPIAware()  # 备用方法
     app = YoloApp()
     app.MainLoop()
