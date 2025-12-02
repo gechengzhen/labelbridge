@@ -1,9 +1,10 @@
-import wx
-import os
 import ctypes
-import numpy as np
 import math
+import os
 import sys
+
+import numpy as np
+import wx
 
 
 class Colors:
@@ -324,7 +325,6 @@ class AnnotationPanel(wx.Panel):
                 self.scaled_bitmap = wx.Bitmap(scaled_img)
                 self._last_scaled_key = key
                 self._scaled_is_full = True
-                print("UpdateScaledBitmap: 缩整张图")
                 return
             key = (
                 "sub",
@@ -487,7 +487,7 @@ class AnnotationPanel(wx.Panel):
         self.DrawToBuffer()
         dc = wx.PaintDC(self)
         dc.DrawBitmap(self.buffer, 0, 0)
-        print("OnPaint")
+        # print("OnPaint")
         # tracer.stop()
         # tracer.save()
 
@@ -581,12 +581,11 @@ class AnnotationPanel(wx.Panel):
 
     def DrawBox(self, dc, box, color, width):
         """绘制矩形框"""
-        pen = wx.Pen(color, width)
-        dc.SetPen(pen)
-        dc.SetBrush(wx.Brush(color, wx.BRUSHSTYLE_TRANSPARENT))
-
+        gc = wx.GraphicsContext.Create(dc)
+        gc.SetPen(wx.Pen(color, width))
+        gc.SetBrush(wx.Brush(wx.Colour(color[0], color[1], color[2], 50)))
         x1, y1, x2, y2 = box
-        dc.DrawRectangle(x1, y1, x2 - x1, y2 - y1)
+        gc.DrawRectangle(x1, y1, x2 - x1, y2 - y1)
 
     def rectangle_corners_from_diagonal(self, p1, p2, theta_deg):
         """
@@ -705,7 +704,6 @@ class AnnotationPanel(wx.Panel):
                 rx = hx + x * math.cos(theta) - y * math.sin(theta)
                 ry = hy + x * math.sin(theta) + y * math.cos(theta)
                 rotated_pts.append((rx, ry))
-            # print("rotated_pts:", rotated_pts)
             rotated_pts = [(int(x), int(y)) for x, y in rotated_pts]
 
             gdc.DrawPolygon(rotated_pts)
@@ -842,27 +840,87 @@ class AnnotationPanel(wx.Panel):
             img_x1, img_y1, img_x2, img_y2, px, py, angle_deg
         )
 
-        # --- GraphicsContext ---
+        # === 创建 GraphicsContext ===
         gc = wx.GraphicsContext.Create(dc)
-
         gc.SetAntialiasMode(wx.ANTIALIAS_DEFAULT)
 
-        # ---- 主十字线条 ----
-        pen_info = wx.GraphicsPenInfo(color).Width(2)
+        # =============================
+        # 1️⃣ 中心点：小圆点
+        # =============================
+        dot_radius = 2  # 小圆点半径
+        blank_radius = 15  # 不画线的半径
 
+        brush = wx.Brush(color)
+        gc.SetBrush(brush)
+        gc.SetPen(wx.NullPen)  # 不需要边线
+
+        gc.DrawEllipse(px - dot_radius, py - dot_radius,
+                       dot_radius * 2, dot_radius * 2)
+
+        # =============================
+        # 2️⃣ 带空白区的十字辅助线
+        # =============================
+        # 主线笔
+        pen_info = wx.GraphicsPenInfo(color).Width(2)
         gc.SetPen(gc.CreatePen(pen_info))
 
-        # 绘制两条旋转线
-        gc.StrokeLine(a1[0], a1[1], a2[0], a2[1])
-        gc.StrokeLine(b1[0], b1[1], b2[0], b2[1])
+        # --- 计算裁剪后的线段 ---
+        def trim_segment(p1, p2):
+            """把线段 p1→p2 在距离中心 blank_radius 内的部分剪掉"""
+            import math
 
-        # ---- 中心点小十字（总是实线）----
-        small_pen = gc.CreatePen(wx.GraphicsPenInfo(color).Width(4))
-        gc.SetPen(small_pen)
+            x1, y1 = p1
+            x2, y2 = p2
 
-        s = 6
-        gc.StrokeLine(px - s, py, px + s, py)
-        gc.StrokeLine(px, py - s, px, py + s)
+            # 向量
+            vx = x2 - x1
+            vy = y2 - y1
+
+            length = math.hypot(vx, vy)
+            if length == 0:
+                return None
+
+            # 单位向量
+            ux = vx / length
+            uy = vy / length
+
+            # p1 到中心的向量
+            wx_ = px - x1
+            wy_ = py - y1
+
+            # 投影长度（p1->center 在 p1->p2 上的投影位置 t）
+            t_center = wx_ * ux + wy_ * uy
+
+            # 切除 [t_center - R, t_center + R]
+            t1 = t_center - blank_radius
+            t2 = t_center + blank_radius
+
+            # 整段都在空白区内
+            if t2 <= 0 or t1 >= length:
+                return [(x1, y1), (x2, y2)]  # 无需裁剪
+
+            segments = []
+
+            # 左段保留（p1 → t1）
+            if t1 > 0:
+                segments.append(((x1, y1), (x1 + ux * t1, y1 + uy * t1)))
+
+            # 右段保留（t2 → p2）
+            if t2 < length:
+                segments.append(((x1 + ux * t2, y1 + uy * t2), (x2, y2)))
+
+            return segments
+
+        # 处理两条线段
+        for seg in trim_segment(a1, a2) or []:
+            gc.StrokeLine(seg[0][0], seg[0][1], seg[1][0], seg[1][1])
+
+        for seg in trim_segment(b1, b2) or []:
+            gc.StrokeLine(seg[0][0], seg[0][1], seg[1][0], seg[1][1])
+
+        # =============================
+        # 3️⃣ OBB 调整点
+        # =============================
         if self.main_frame.mode == "YOLO-OBB" and getattr(self, "adjusting", False):
             self.DrawAnchor(gc, self.adjust_last_pos[0], self.adjust_last_pos[1])
 
@@ -1020,16 +1078,12 @@ class AnnotationPanel(wx.Panel):
         clicked_index = self.GetAnnotationAt(pos)
 
         if clicked_index >= 0:
-            # 如果点击的是已选中的框，开始移动
-            if clicked_index == self.selected_annotation_index:
-                self.editing_mode = 'move'
-                self.edit_start_pos = pos
-                self.original_bbox = self.annotations[clicked_index]['bbox'][:]
-                print(self.original_bbox)
-            else:
-                # 选中新的框
-                self.selected_annotation_index = clicked_index
-                self.Refresh(False)  # 刷新，不擦背景，减少闪烁
+            # 点击选中的框，开始移动
+            self.editing_mode = 'move'
+            self.edit_start_pos = pos
+            self.original_bbox = self.annotations[clicked_index]['bbox'][:]
+            self.selected_annotation_index = clicked_index
+            self.Refresh(False)  # 刷新，不擦背景，减少闪烁
         else:
             # 取消选择，开始画新框
             self.selected_annotation_index = -1
@@ -1042,10 +1096,7 @@ class AnnotationPanel(wx.Panel):
                 if dlg.ShowModal() == wx.ID_YES:
                     self.main_frame.OnAddClass(None)
                 dlg.Destroy()
-
-                # 如果添加类别后仍然没有类别，则不开始绘制
-                if not self.main_frame.class_names:
-                    return
+                return
 
             self.drawing = True
             # 限制起始位置在图片内
@@ -1054,7 +1105,6 @@ class AnnotationPanel(wx.Panel):
             self.current_box = (clamped_pos.x, clamped_pos.y, clamped_pos.x, clamped_pos.y)
             self.current_obb_box = (clamped_pos.x, clamped_pos.y, clamped_pos.x, clamped_pos.y,
                                     clamped_pos.x, clamped_pos.y, clamped_pos.x, clamped_pos.y)
-            print(self.current_box)
             self.Refresh(False)  # 刷新，不擦背景，减少闪烁
 
     def OnLeftUp(self, event):
@@ -1101,7 +1151,6 @@ class AnnotationPanel(wx.Panel):
                             'bbox': yolo_bbox
                         }
                     self.annotations.append(annotation)
-                    print(self.annotations)
                     self.main_frame.UpdateAnnotationList()
 
                     # 选中新创建的标注
@@ -1237,8 +1286,6 @@ class AnnotationPanel(wx.Panel):
             # self.UpdateScaledBitmap()
             # self.ClampOffset()
             self.Refresh(False)
-            print("panning")
-            print(pos)
 
         if self.main_frame.mode == "YOLO-OBB" and getattr(self, "adjusting", False):
             pos = event.GetPosition()
@@ -1619,7 +1666,6 @@ class AnnotationPanel(wx.Panel):
             elif key_code == ord('V'):
                 self.cross_angle += 5 * self.rotation_step
             self.cross_angle %= 360
-            # print(f"十字角度: {self.cross_angle:.1f}°")
             self.Refresh(False)
             return
 
@@ -1643,7 +1689,6 @@ class AnnotationPanel(wx.Panel):
                     self.ReleaseMouse()
             except Exception:
                 pass
-            self.SetCursor(wx.NullCursor)
             self.adjust_last_pos = None
             self.Refresh(False)
 
@@ -1860,13 +1905,9 @@ class YoloLabelingTool(wx.Frame):
         load_btn.Bind(wx.EVT_BUTTON, self.OnLoadFolder)
         file_sizer.Add(load_btn, 0, wx.EXPAND | wx.ALL, 5)
 
-        save_btn = wx.Button(left_panel, label="保存当前标注")
+        save_btn = wx.Button(left_panel, label="导出所有标注")
         save_btn.Bind(wx.EVT_BUTTON, self.OnSave)
         file_sizer.Add(save_btn, 0, wx.EXPAND | wx.ALL, 5)
-
-        export_btn = wx.Button(left_panel, label="导出所有标注")
-        export_btn.Bind(wx.EVT_BUTTON, self.OnExportAll)
-        file_sizer.Add(export_btn, 0, wx.EXPAND | wx.ALL, 5)
 
         left_sizer.Add(file_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
@@ -2132,24 +2173,13 @@ class YoloLabelingTool(wx.Frame):
                 self.SetStatusText(
                     f"当前图片: {os.path.basename(image_path)} ({selection + 1}/{len(self.image_files)})")
 
-    def OnSave(self, event):
+    def OnSave(self, event=None):
         """保存当前标注"""
         if self.annotation_panel.image_path:
             self.annotation_panel.SaveAnnotations()
             self.SetStatusText("标注已保存")
         else:
             wx.MessageBox("没有图片需要保存", "提示", wx.OK | wx.ICON_INFORMATION)
-
-    def OnExportAll(self, event):
-        """导出所有标注"""
-        if not self.image_files:
-            wx.MessageBox("没有图片需要导出", "提示", wx.OK | wx.ICON_INFORMATION)
-            return
-
-        # 保存当前标注
-        if self.annotation_panel.image_path:
-            self.annotation_panel.SaveAnnotations()
-
         # 创建classes.txt文件
         if self.image_files and self.class_names:
             folder_path = os.path.dirname(self.image_files[0])
@@ -2427,24 +2457,34 @@ class YoloLabelingTool(wx.Frame):
     #             f"{prefix}{i + 1}. {class_name} ({bbox[0]:.3f}, {bbox[1]:.3f}, {bbox[2]:.3f}, {bbox[3]:.3f})")
     #     self.annotation_list.Thaw()
     def UpdateAnnotationList(self):
-        """更新标注列表显示"""
-        self.annotation_list.Freeze()
-        self.annotation_list.DeleteAllItems()
+        """增量更新标注列表，避免闪烁"""
+        anns = self.annotation_panel.annotations
+        list_ctrl = self.annotation_list
+        current_count = list_ctrl.GetItemCount()
+        target_count = len(anns)
 
-        for i, ann in enumerate(self.annotation_panel.annotations):
-            if ann['class'] < len(self.class_names):
-                class_name = self.class_names[ann['class']]
-            else:
-                class_name = f"Class {ann['class']}"
+        # 1. 删除多余的项（如果列表比 annotations 长）
+        while list_ctrl.GetItemCount() > target_count:
+            list_ctrl.DeleteItem(list_ctrl.GetItemCount() - 1)
+
+        # 2. 添加新项（如果 annotations 比列表长）
+        while list_ctrl.GetItemCount() < target_count:
+            idx = list_ctrl.GetItemCount()
+            list_ctrl.InsertItem(idx, "")  # 占位，后面会填内容
+
+        # 3. 更新每一项的内容（包括选中标记）
+        for i in range(target_count):
+            ann = anns[i]
+            class_name = self.class_names[ann['class']] if ann['class'] < len(
+                self.class_names) else f"Class {ann['class']}"
             bbox = ann['bbox']
+            prefix = "►" if i == self.annotation_panel.selected_annotation_index else ""
 
-            index = self.annotation_list.InsertItem(i,
-                                                    "►" if i == self.annotation_panel.selected_annotation_index else "")
-            self.annotation_list.SetItem(index, 1, str(i + 1))
-            self.annotation_list.SetItem(index, 2, class_name)
-            self.annotation_list.SetItem(index, 3, f"({bbox[0]:.3f}, {bbox[1]:.3f}, {bbox[2]:.3f}, {bbox[3]:.3f})")
-
-        self.annotation_list.Thaw()
+            # 更新各列
+            list_ctrl.SetItem(i, 0, prefix)
+            list_ctrl.SetItem(i, 1, str(i + 1))
+            list_ctrl.SetItem(i, 2, class_name)
+            list_ctrl.SetItem(i, 3, f"({bbox[0]:.3f}, {bbox[1]:.3f}, {bbox[2]:.3f}, {bbox[3]:.3f})")
 
     def UpdateAnnotationListItem(self, index):
         """仅更新指定索引的标注列表项"""
@@ -2478,20 +2518,14 @@ class YoloLabelingTool(wx.Frame):
 
     def OnExit(self, event):
         """退出程序"""
-        # 保存当前标注
-        print("onexit")
-        if hasattr(self, 'annotation_panel') and self.annotation_panel.image_path:
-            self.annotation_panel.SaveAnnotations()
-        self.Close()
+        print("OnExit")
+        self.OnClose()
 
-    def OnClose(self, event):
+    def OnClose(self, event=None):
         """处理窗口关闭事件"""
-        # 执行你的退出逻辑
+        print("OnClose")
         # 保存当前标注
-        print("onexit")
-        if hasattr(self, 'annotation_panel') and self.annotation_panel.image_path:
-            self.annotation_panel.SaveAnnotations()
-
+        self.OnSave()
         # 确保窗口真正关闭（调用 Destroy）
         self.Destroy()
 
