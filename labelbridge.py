@@ -1219,7 +1219,7 @@ class AnnotationPanel(wx.Panel):
                 dlg = wx.MessageDialog(self, "No classes available. Would you like to add a new class?", "Info",
                                        wx.YES_NO | wx.ICON_QUESTION)
                 if dlg.ShowModal() == wx.ID_YES:
-                    self.main_frame.OnAddClass(None)
+                    self.main_frame.on_add_class(None)
                 dlg.Destroy()
                 return
 
