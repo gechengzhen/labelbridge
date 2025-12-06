@@ -7,6 +7,242 @@ import numpy as np
 import wx
 
 
+class I18N:
+    """国际化文本管理"""
+    TEXTS = {
+        'en': {
+            # Window
+            'app_title': 'labelbridge',
+            'ready_status': 'Ready - Left-click drag to create box, click to select, drag to move/resize',
+
+            # Mode
+            'mode_select': 'Mode Selection',
+            'mode_yolo': 'YOLO',
+            'mode_yolo_obb': 'YOLO-OBB',
+
+            # File Operations
+            'file_ops': 'File Operations',
+            'load_folder': 'Load Image Folder',
+            'export_all': 'Export All Annotations',
+
+            # Image List
+            'image_list': 'Image List',
+            'prev_image': 'Previous',
+            'next_image': 'Next',
+
+            # Class Management
+            'class_manage': 'Class Management',
+            'current_class': 'Current Class:',
+            'no_class': 'None',
+            'add_class': 'Add',
+            'edit_class': 'Edit',
+            'delete_class': 'Delete',
+            'move_up': 'Move Up',
+            'move_down': 'Move Down',
+
+            # Annotation List
+            'current_annotations': 'Current Annotations',
+            'delete_annotation': 'Delete Selected',
+            'col_select': 'Select',
+            'col_index': 'Index',
+            'col_class': 'Class',
+            'col_bbox': 'Bounding Box',
+
+            # Menu Bar
+            'menu_file': 'File',
+            'menu_open': 'Open Folder\tCtrl+O',
+            'menu_save': 'Save\tCtrl+S',
+            'menu_exit': 'Exit\tCtrl+Q',
+            'menu_nav': 'Navigation',
+            'menu_prev': 'Previous\tLeft',
+            'menu_next': 'Next\tRight',
+            'menu_help': 'Help',
+            'menu_about': 'About',
+            'menu_language': 'Language',
+            'menu_english': 'English',
+            'menu_chinese': '中文',
+
+            # Dialogs
+            'add_class_title': 'Add Class',
+            'add_class_prompt': 'Enter new class name:',
+            'edit_class_title': 'Edit Class',
+            'edit_class_prompt': 'Edit class name:',
+            'delete_class_title': 'Confirm Delete',
+            'delete_class_msg': "Are you sure you want to delete class '{}'?\nNote: This will delete all annotation boxes using this class in all images!",
+            'select_class_first': 'Please select a class first',
+            'info': 'Info',
+            'error': 'Error',
+            'success': 'Success',
+
+            # Messages
+            'loaded_images': 'Loaded {} images',
+            'current_image': 'Current image: {} ({}/{})',
+            'annotation_saved': 'Annotations saved',
+            'no_image_to_save': 'No image to save',
+            'export_complete': 'Export complete!\nClass file: {}',
+            'export_failed': 'Export failed: {}',
+            'read_classes_failed': 'Failed to read classes.txt: {}',
+
+            # About Dialog
+            'about_description': (
+                "labelbridge - Efficient Image Annotation Tool\n\n"
+                "Supports YOLO and YOLO-OBB (rotated box) annotation modes\n\n"
+                "Usage:\n"
+                "1. Load Image Folder: Load images to annotate\n"
+                "2. Class Management: Add, edit, sort class list\n"
+                "3. Select Current Class: Choose annotation class from left list\n"
+                "4. Image Annotation:\n"
+                "   • Normal Rectangle (YOLO mode):\n"
+                "     - Left-click drag: Create new annotation box\n"
+                "     - Click box: Select annotation box\n"
+                "     - Drag box: Move selected box\n"
+                "     - Drag handles: Resize box\n"
+                "   • Rotated Rectangle (YOLO-OBB mode):\n"
+                "     - Z/X/C/V keys: Adjust crosshair angle\n"
+                "     - Right-click drag: Real-time rotation adjustment\n"
+                "     - Other operations same as normal box\n"
+                "5. Image Navigation:\n"
+                "   • Left/Right arrow keys: Switch images\n"
+                "   • Image list: Direct image selection\n"
+                "6. Annotation Editing:\n"
+                "   • Delete key: Delete selected annotation\n"
+                "   • ESC key: Cancel selection\n"
+                "7. Pan & Zoom:\n"
+                "   • Middle-click drag: Pan image\n"
+                "   • Ctrl+Wheel: Zoom centered on mouse\n"
+                "8. Save Annotations:\n"
+                "   • Auto-save: Automatically saves when switching images\n"
+                "   • Manual save: Click export button to save\n\n"
+                "Export Format:\n"
+                "• YOLO format: class_id x_center y_center width height\n"
+                "• YOLO-OBB format: class_id x1 y1 x2 y2 x3 y3 x4 y4\n"
+                "• Class file: Automatically generates classes.txt"
+            ),
+        },
+        'zh': {
+            # Window
+            'app_title': 'labelbridge',
+            'ready_status': '就绪 - 左键拖拽创建框，单击选中，拖拽移动/调整大小',
+
+            # Mode
+            'mode_select': '模式选择',
+            'mode_yolo': 'YOLO',
+            'mode_yolo_obb': 'YOLO-OBB',
+
+            # File Operations
+            'file_ops': '文件操作',
+            'load_folder': '导入图片文件夹',
+            'export_all': '导出所有标注',
+
+            # Image List
+            'image_list': '图片列表',
+            'prev_image': '上一张',
+            'next_image': '下一张',
+
+            # Class Management
+            'class_manage': '类别管理',
+            'current_class': '当前类别:',
+            'no_class': '无',
+            'add_class': '添加',
+            'edit_class': '编辑',
+            'delete_class': '删除',
+            'move_up': '上移',
+            'move_down': '下移',
+
+            # Annotation List
+            'current_annotations': '当前标注',
+            'delete_annotation': '删除选中标注',
+            'col_select': '选择',
+            'col_index': '序号',
+            'col_class': '类别',
+            'col_bbox': '边界框',
+
+            # Menu Bar
+            'menu_file': '文件',
+            'menu_open': '打开文件夹\tCtrl+O',
+            'menu_save': '保存\tCtrl+S',
+            'menu_exit': '退出\tCtrl+Q',
+            'menu_nav': '导航',
+            'menu_prev': '上一张\tLeft',
+            'menu_next': '下一张\tRight',
+            'menu_help': '帮助',
+            'menu_about': '关于',
+            'menu_language': '语言',
+            'menu_english': 'English',
+            'menu_chinese': '中文',
+
+            # Dialogs
+            'add_class_title': '添加类别',
+            'add_class_prompt': '输入新类别名称:',
+            'edit_class_title': '编辑类别',
+            'edit_class_prompt': '编辑类别名称:',
+            'delete_class_title': '确认删除',
+            'delete_class_msg': "确定要删除类别 '{}' 吗？\n注意：这将删除所有图片中使用该类别的标注框！",
+            'select_class_first': '请先选择要编辑的类别',
+            'info': '提示',
+            'error': '错误',
+            'success': '导出成功',
+
+            # Messages
+            'loaded_images': '加载了 {} 张图片',
+            'current_image': '当前图片: {} ({}/{})',
+            'annotation_saved': '标注已保存',
+            'no_image_to_save': '没有图片需要保存',
+            'export_complete': '导出完成！\n类别文件: {}',
+            'export_failed': '导出失败: {}',
+            'read_classes_failed': '读取classes.txt失败: {}',
+
+            # About Dialog
+            'about_description': (
+                "labelbridge - 高效便捷的图像标注工具\n\n"
+                "支持 YOLO 和 YOLO-OBB（旋转框）两种标注模式\n\n"
+                "使用说明:\n"
+                "1. 导入图片文件夹：加载需要标注的图片\n"
+                "2. 类别管理：添加、编辑、排序类别列表\n"
+                "3. 选择当前类别：在左侧列表中选择标注类别\n"
+                "4. 图像标注：\n"
+                "   • 普通矩形框（YOLO模式）：\n"
+                "     - 左键拖拽：创建新标注框\n"
+                "     - 单击框：选中标注框\n"
+                "     - 拖拽框：移动选中框\n"
+                "     - 拖拽手柄：调整框大小\n"
+                "   • 旋转矩形框（YOLO-OBB模式）：\n"
+                "     - Z/X/C/V键：调整十字辅助线角度\n"
+                "     - 右键拖动：实时调整旋转角度\n"
+                "     - 其他操作同普通框\n"
+                "5. 图像导航：\n"
+                "   • 左右箭头键：切换图片\n"
+                "   • 图片列表：直接选择图片\n"
+                "6. 标注编辑：\n"
+                "   • Delete键：删除选中标注\n"
+                "   • ESC键：取消选择\n"
+                "7. 平移缩放：\n"
+                "   • 中键拖动：平移图像\n"
+                "   • Ctrl+滚轮：以鼠标为中心缩放\n"
+                "8. 保存标注：\n"
+                "   • 自动保存：切换图片时自动保存\n"
+                "   • 手动保存：点击导出按钮保存\n\n"
+                "导出格式：\n"
+                "• YOLO格式：class_id x_center y_center width height\n"
+                "• YOLO-OBB格式：class_id x1 y1 x2 y2 x3 y3 x4 y4\n"
+                "• 类别文件：自动生成 classes.txt"
+            ),
+        }
+    }
+
+    def __init__(self, lang='en'):
+        self.current_lang = lang
+
+    def t(self, key):
+        """获取翻译文本"""
+        return self.TEXTS.get(self.current_lang, {}).get(key, key)
+
+    def set_language(self, lang):
+        """设置语言"""
+        if lang in self.TEXTS:
+            self.current_lang = lang
+
+
 class Colors:
     """
     Ultralytics color palette for visualization and plotting.
@@ -1861,7 +2097,8 @@ class AnnotationPanel(wx.Panel):
 
 class YoloLabelingTool(wx.Frame):
     def __init__(self):
-        super().__init__(None, title="labelbridge", size=wx.Size(1200, 800))
+        self.i18n = I18N('en')  # 默认英文
+        super().__init__(None, title=self.i18n.t('app_title'), size=wx.Size(1200, 800))
 
         self.image_list = None
         self.current_class_label = None
@@ -1884,13 +2121,15 @@ class YoloLabelingTool(wx.Frame):
         left_panel = wx.Panel(panel)
         left_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        mode_box = wx.StaticBox(left_panel, label="模式选择")
+        # 模式选择
+        mode_box = wx.StaticBox(left_panel, label=self.i18n.t('mode_select'))
         mode_sizer = wx.StaticBoxSizer(mode_box, wx.VERTICAL)
 
-        mode_choice = wx.Choice(left_panel, choices=["YOLO", "YOLO-OBB"])
+        mode_choice = wx.Choice(left_panel, choices=[
+            self.i18n.t('mode_yolo'),
+            self.i18n.t('mode_yolo_obb')
+        ])
         mode_choice.Bind(wx.EVT_CHOICE, self.on_switch_mode)
-
-        # 设置默认选择为 "YOLO"
         mode_choice.SetSelection(0)
         self.mode = "YOLO"
 
@@ -1898,21 +2137,21 @@ class YoloLabelingTool(wx.Frame):
         left_sizer.Insert(0, mode_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # 文件操作按钮
-        file_box = wx.StaticBox(left_panel, label="文件操作")
+        file_box = wx.StaticBox(left_panel, label=self.i18n.t('file_ops'))
         file_sizer = wx.StaticBoxSizer(file_box, wx.VERTICAL)
 
-        load_btn = wx.Button(left_panel, label="导入图片文件夹")
-        load_btn.Bind(wx.EVT_BUTTON, self.OnLoadFolder)
-        file_sizer.Add(load_btn, 0, wx.EXPAND | wx.ALL, 5)
+        self.load_btn = wx.Button(left_panel, label=self.i18n.t('load_folder'))
+        self.load_btn.Bind(wx.EVT_BUTTON, self.OnLoadFolder)
+        file_sizer.Add(self.load_btn, 0, wx.EXPAND | wx.ALL, 5)
 
-        save_btn = wx.Button(left_panel, label="导出所有标注")
-        save_btn.Bind(wx.EVT_BUTTON, self.OnSave)
-        file_sizer.Add(save_btn, 0, wx.EXPAND | wx.ALL, 5)
+        self.save_btn = wx.Button(left_panel, label=self.i18n.t('export_all'))
+        self.save_btn.Bind(wx.EVT_BUTTON, self.OnSave)
+        file_sizer.Add(self.save_btn, 0, wx.EXPAND | wx.ALL, 5)
 
         left_sizer.Add(file_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # 图片列表
-        list_box = wx.StaticBox(left_panel, label="图片列表")
+        list_box = wx.StaticBox(left_panel, label=self.i18n.t('image_list'))
         list_sizer = wx.StaticBoxSizer(list_box, wx.VERTICAL)
 
         self.image_list = wx.ListBox(left_panel)
@@ -1921,27 +2160,28 @@ class YoloLabelingTool(wx.Frame):
 
         # 导航按钮
         nav_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        prev_btn = wx.Button(left_panel, label="上一张")
-        prev_btn.Bind(wx.EVT_BUTTON, self.OnPrevImage)
-        nav_sizer.Add(prev_btn, 1, wx.EXPAND | wx.RIGHT, 2)
+        self.prev_btn = wx.Button(left_panel, label=self.i18n.t('prev_image'))
+        self.prev_btn.Bind(wx.EVT_BUTTON, self.OnPrevImage)
+        nav_sizer.Add(self.prev_btn, 1, wx.EXPAND | wx.RIGHT, 2)
 
-        next_btn = wx.Button(left_panel, label="下一张")
-        next_btn.Bind(wx.EVT_BUTTON, self.OnNextImage)
-        nav_sizer.Add(next_btn, 1, wx.EXPAND | wx.LEFT, 2)
+        self.next_btn = wx.Button(left_panel, label=self.i18n.t('next_image'))
+        self.next_btn.Bind(wx.EVT_BUTTON, self.OnNextImage)
+        nav_sizer.Add(self.next_btn, 1, wx.EXPAND | wx.LEFT, 2)
 
         list_sizer.Add(nav_sizer, 0, wx.EXPAND | wx.ALL, 5)
-
         left_sizer.Add(list_sizer, 1, wx.EXPAND | wx.ALL, 5)
 
-        # 类别选择 - 改为列表框形式
-        class_box = wx.StaticBox(left_panel, label="类别管理")
+        # 类别选择
+        class_box = wx.StaticBox(left_panel, label=self.i18n.t('class_manage'))
         class_sizer = wx.StaticBoxSizer(class_box, wx.VERTICAL)
 
-        # 当前选择的类别显示
+        # 当前类别显示
         current_class_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        current_class_sizer.Add(wx.StaticText(left_panel, label="当前类别:"), 0,
-                                wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
-        self.current_class_label = wx.StaticText(left_panel, label="无")
+        current_class_sizer.Add(
+            wx.StaticText(left_panel, label=self.i18n.t('current_class')),
+            0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5
+        )
+        self.current_class_label = wx.StaticText(left_panel, label=self.i18n.t('no_class'))
         self.current_class_label.SetForegroundColour(wx.Colour(255, 0, 0))
         current_class_sizer.Add(self.current_class_label, 1, wx.ALIGN_CENTER_VERTICAL)
         class_sizer.Add(current_class_sizer, 0, wx.EXPAND | wx.ALL, 5)
@@ -1954,62 +2194,51 @@ class YoloLabelingTool(wx.Frame):
         # 类别操作按钮
         class_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        add_class_btn = wx.Button(left_panel, label="添加")
-        add_class_btn.Bind(wx.EVT_BUTTON, self.OnAddClass)
-        class_btn_sizer.Add(add_class_btn, 1, wx.EXPAND | wx.RIGHT, 2)
+        self.add_class_btn = wx.Button(left_panel, label=self.i18n.t('add_class'))
+        self.add_class_btn.Bind(wx.EVT_BUTTON, self.OnAddClass)
+        class_btn_sizer.Add(self.add_class_btn, 1, wx.EXPAND | wx.RIGHT, 2)
 
-        edit_class_btn = wx.Button(left_panel, label="编辑")
-        edit_class_btn.Bind(wx.EVT_BUTTON, self.OnEditClass)
-        class_btn_sizer.Add(edit_class_btn, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 2)
+        self.edit_class_btn = wx.Button(left_panel, label=self.i18n.t('edit_class'))
+        self.edit_class_btn.Bind(wx.EVT_BUTTON, self.OnEditClass)
+        class_btn_sizer.Add(self.edit_class_btn, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 2)
 
-        del_class_btn = wx.Button(left_panel, label="删除")
-        del_class_btn.Bind(wx.EVT_BUTTON, self.OnDeleteClass)
-        class_btn_sizer.Add(del_class_btn, 1, wx.EXPAND | wx.LEFT, 2)
+        self.del_class_btn = wx.Button(left_panel, label=self.i18n.t('delete_class'))
+        self.del_class_btn.Bind(wx.EVT_BUTTON, self.OnDeleteClass)
+        class_btn_sizer.Add(self.del_class_btn, 1, wx.EXPAND | wx.LEFT, 2)
 
         class_sizer.Add(class_btn_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # 排序按钮
         sort_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        up_btn = wx.Button(left_panel, label="上移")
-        up_btn.Bind(wx.EVT_BUTTON, self.OnMoveUp)
-        sort_btn_sizer.Add(up_btn, 1, wx.EXPAND | wx.RIGHT, 2)
+        self.up_btn = wx.Button(left_panel, label=self.i18n.t('move_up'))
+        self.up_btn.Bind(wx.EVT_BUTTON, self.OnMoveUp)
+        sort_btn_sizer.Add(self.up_btn, 1, wx.EXPAND | wx.RIGHT, 2)
 
-        down_btn = wx.Button(left_panel, label="下移")
-        down_btn.Bind(wx.EVT_BUTTON, self.OnMoveDown)
-        sort_btn_sizer.Add(down_btn, 1, wx.EXPAND | wx.LEFT, 2)
+        self.down_btn = wx.Button(left_panel, label=self.i18n.t('move_down'))
+        self.down_btn.Bind(wx.EVT_BUTTON, self.OnMoveDown)
+        sort_btn_sizer.Add(self.down_btn, 1, wx.EXPAND | wx.LEFT, 2)
 
         class_sizer.Add(sort_btn_sizer, 0, wx.EXPAND | wx.ALL, 5)
-
         left_sizer.Add(class_sizer, 1, wx.EXPAND | wx.ALL, 5)
 
         # 标注列表
-        ann_box = wx.StaticBox(left_panel, label="当前标注")
+        ann_box = wx.StaticBox(left_panel, label=self.i18n.t('current_annotations'))
         ann_sizer = wx.StaticBoxSizer(ann_box, wx.VERTICAL)
 
-        # self.annotation_list = wx.ListBox(left_panel)
-        # self.annotation_list.Bind(wx.EVT_LISTBOX, self.OnAnnotationSelect)
-
         self.annotation_list = wx.ListCtrl(left_panel, style=wx.LC_REPORT | wx.LC_SINGLE_SEL)
-        self.annotation_list.InsertColumn(0, "选择", width=40)
-        self.annotation_list.InsertColumn(1, "序号", width=50)
-        self.annotation_list.InsertColumn(2, "类别", width=80)
-        self.annotation_list.InsertColumn(3, "边界框", width=200)
-        # 在初始化时
-        # self.annotation_list = wx.ListCtrl(self, style=wx.LC_REPORT | wx.LC_SINGLE_SEL)
-        # self.annotation_list.EnableAlternateRowColours(True)
-        # 启用双缓冲
-        # if hasattr(self.annotation_list, 'SetDoubleBuffered'):
-        #     self.annotation_list.SetDoubleBuffered(True)
+        self.annotation_list.InsertColumn(0, self.i18n.t('col_select'), width=40)
+        self.annotation_list.InsertColumn(1, self.i18n.t('col_index'), width=50)
+        self.annotation_list.InsertColumn(2, self.i18n.t('col_class'), width=80)
+        self.annotation_list.InsertColumn(3, self.i18n.t('col_bbox'), width=200)
 
         ann_sizer.Add(self.annotation_list, 1, wx.EXPAND | wx.ALL, 5)
 
-        del_ann_btn = wx.Button(left_panel, label="删除选中标注")
-        del_ann_btn.Bind(wx.EVT_BUTTON, self.OnDeleteAnnotation)
-        ann_sizer.Add(del_ann_btn, 0, wx.EXPAND | wx.ALL, 5)
+        self.del_ann_btn = wx.Button(left_panel, label=self.i18n.t('delete_annotation'))
+        self.del_ann_btn.Bind(wx.EVT_BUTTON, self.OnDeleteAnnotation)
+        ann_sizer.Add(self.del_ann_btn, 0, wx.EXPAND | wx.ALL, 5)
 
         left_sizer.Add(ann_sizer, 1, wx.EXPAND | wx.ALL, 5)
-
         left_panel.SetSizer(left_sizer)
 
         # 右侧图片显示区域
@@ -2018,7 +2247,6 @@ class YoloLabelingTool(wx.Frame):
         # 布局
         main_sizer.Add(left_panel, 0, wx.EXPAND | wx.ALL, 5)
         main_sizer.Add(self.annotation_panel, 1, wx.EXPAND | wx.ALL, 5)
-
         panel.SetSizer(main_sizer)
 
         # 创建菜单栏
@@ -2026,7 +2254,7 @@ class YoloLabelingTool(wx.Frame):
 
         # 创建状态栏
         self.CreateStatusBar()
-        self.SetStatusText("就绪 - 左键拖拽创建框，单击选中，拖拽移动/调整大小")
+        self.SetStatusText(self.i18n.t('ready_status'))
 
     def CreateMenuBar(self):
         """创建菜单栏"""
@@ -2034,25 +2262,28 @@ class YoloLabelingTool(wx.Frame):
 
         # 文件菜单
         file_menu = wx.Menu()
-        file_menu.Append(wx.ID_OPEN, "打开文件夹\tCtrl+O")
-        file_menu.Append(wx.ID_SAVE, "保存\tCtrl+S")
+        file_menu.Append(wx.ID_OPEN, self.i18n.t('menu_open'))
+        file_menu.Append(wx.ID_SAVE, self.i18n.t('menu_save'))
         file_menu.AppendSeparator()
-        file_menu.Append(wx.ID_EXIT, "退出\tCtrl+Q")
-
-        menubar.Append(file_menu, "文件")
+        file_menu.Append(wx.ID_EXIT, self.i18n.t('menu_exit'))
+        menubar.Append(file_menu, self.i18n.t('menu_file'))
 
         # 导航菜单
         nav_menu = wx.Menu()
-        nav_menu.Append(101, "上一张\tLeft")
-        nav_menu.Append(102, "下一张\tRight")
+        nav_menu.Append(101, self.i18n.t('menu_prev'))
+        nav_menu.Append(102, self.i18n.t('menu_next'))
+        menubar.Append(nav_menu, self.i18n.t('menu_nav'))
 
-        menubar.Append(nav_menu, "导航")
+        # 语言菜单
+        lang_menu = wx.Menu()
+        lang_menu.Append(201, self.i18n.t('menu_english'))
+        lang_menu.Append(202, self.i18n.t('menu_chinese'))
+        menubar.Append(lang_menu, self.i18n.t('menu_language'))
 
         # 帮助菜单
         help_menu = wx.Menu()
-        help_menu.Append(wx.ID_ABOUT, "关于")
-
-        menubar.Append(help_menu, "帮助")
+        help_menu.Append(wx.ID_ABOUT, self.i18n.t('menu_about'))
+        menubar.Append(help_menu, self.i18n.t('menu_help'))
 
         self.SetMenuBar(menubar)
 
@@ -2063,6 +2294,8 @@ class YoloLabelingTool(wx.Frame):
         self.Bind(wx.EVT_MENU, self.OnAbout, id=wx.ID_ABOUT)
         self.Bind(wx.EVT_MENU, self.OnPrevImage, id=101)
         self.Bind(wx.EVT_MENU, self.OnNextImage, id=102)
+        self.Bind(wx.EVT_MENU, lambda e: self.SwitchLanguage('en'), id=201)
+        self.Bind(wx.EVT_MENU, lambda e: self.SwitchLanguage('zh'), id=202)
         self.Bind(wx.EVT_CLOSE, self.OnClose)
 
         # 绑定快捷键
@@ -2075,34 +2308,176 @@ class YoloLabelingTool(wx.Frame):
         ])
         self.SetAcceleratorTable(accel_tbl)
 
-    def on_switch_mode(self, event):
-        """切换标注模式（YOLO / YOLO-OBB）"""
-        choice = event.GetEventObject()
-        mode = choice.GetStringSelection()
-        self.mode = mode  # 保存当前模式
+    def SwitchLanguage(self, lang):
+        """切换语言"""
+        self.i18n.set_language(lang)
+        # 重建界面
+        self.Freeze()
 
-        # 可选：打印或日志输出，方便调试
-        print(f"切换到模式: {self.mode}")
+        # 保存当前状态
+        current_image_index = self.current_image_index
 
-    def OnPrevImage(self, event):
-        """上一张图片"""
-        if self.image_files and self.current_image_index > 0:
-            self.image_list.SetSelection(self.current_image_index - 1)
-            self.OnImageSelect(None)
+        # 销毁旧界面
+        for child in self.GetChildren():
+            child.Destroy()
 
-    def OnNextImage(self, event):
-        """下一张图片"""
-        if self.image_files and self.current_image_index < len(self.image_files) - 1:
-            self.image_list.SetSelection(self.current_image_index + 1)
-            self.OnImageSelect(None)
+        # 重新初始化界面
+        self.InitUI()
 
-    def OnAnnotationSelect(self, event):
-        """选择标注列表中的项目"""
-        selection = self.annotation_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            # 在画板上选中对应的标注
-            self.annotation_panel.selected_annotation_index = selection
+        # 恢复状态
+        if self.image_files:
+            self.image_list.Clear()
+            for img_path in self.image_files:
+                self.image_list.Append(os.path.basename(img_path))
+
+            if current_image_index >= 0:
+                self.image_list.SetSelection(current_image_index)
+                self.OnImageSelect(None)
+
+        if self.class_names:
+            self.UpdateClassList()
+
+        self.Thaw()
+        self.Layout()
+
+    def OnAddClass(self, event):
+        """添加新类别"""
+        dlg = wx.TextEntryDialog(
+            self,
+            self.i18n.t('add_class_prompt'),
+            self.i18n.t('add_class_title')
+        )
+        if dlg.ShowModal() == wx.ID_OK:
+            class_name = dlg.GetValue().strip()
+            if class_name:
+                self.class_names.append(class_name)
+                self.UpdateClassList()
+                self.class_list.SetSelection(self.class_list.GetCount() - 1)
+                self.OnClassSelect(None)
+        dlg.Destroy()
+
+    def OnEditClass(self, event):
+        """编辑类别"""
+        selection = self.class_list.GetSelection()
+        if selection == wx.NOT_FOUND:
+            wx.MessageBox(
+                self.i18n.t('select_class_first'),
+                self.i18n.t('info'),
+                wx.OK | wx.ICON_INFORMATION
+            )
+            return
+
+        current_name = self.class_names[selection]
+        dlg = wx.TextEntryDialog(
+            self,
+            self.i18n.t('edit_class_prompt'),
+            self.i18n.t('edit_class_title'),
+            current_name
+        )
+        if dlg.ShowModal() == wx.ID_OK:
+            new_name = dlg.GetValue().strip()
+            if new_name and new_name != current_name:
+                self.class_names[selection] = new_name
+                self.UpdateClassList()
+                self.class_list.SetSelection(selection)
+                self.OnClassSelect(None)
+                if hasattr(self, 'annotation_panel'):
+                    self.annotation_panel.Refresh()
+                    self.UpdateAnnotationList()
+        dlg.Destroy()
+
+    def OnDeleteClass(self, event):
+        """删除类别"""
+        selection = self.class_list.GetSelection()
+        if selection == wx.NOT_FOUND:
+            wx.MessageBox(
+                self.i18n.t('select_class_first'),
+                self.i18n.t('info'),
+                wx.OK | wx.ICON_INFORMATION
+            )
+            return
+
+        class_name = self.class_names[selection]
+        dlg = wx.MessageDialog(
+            self,
+            self.i18n.t('delete_class_msg').format(class_name),
+            self.i18n.t('delete_class_title'),
+            wx.YES_NO | wx.ICON_QUESTION
+        )
+        if dlg.ShowModal() == wx.ID_YES:
+            # 执行删除逻辑（保持原有代码）
+            if self.annotation_panel.image_path:
+                self.annotation_panel.SaveAnnotations()
+
+            self.annotation_panel.annotations = [
+                ann for ann in self.annotation_panel.annotations
+                if ann['class'] != selection
+            ]
+
+            new_class_names = []
+            id_mapping = {}
+            new_id = 0
+            for old_id in range(len(self.class_names)):
+                if old_id != selection:
+                    new_class_names.append(self.class_names[old_id])
+                    id_mapping[old_id] = new_id
+                    new_id += 1
+
+            self.class_names = new_class_names
+
+            for ann in self.annotation_panel.annotations:
+                old_class_id = ann['class']
+                if old_class_id in id_mapping:
+                    ann['class'] = id_mapping[old_class_id]
+
+            self.UpdateAllAnnotationFiles(id_mapping)
+            self.UpdateClassList()
+
+            if not self.class_names:
+                self.current_class_label.SetLabel(self.i18n.t('no_class'))
+            else:
+                new_selection = min(selection, self.class_list.GetCount() - 1)
+                self.class_list.SetSelection(new_selection)
+                self.OnClassSelect(None)
+
+            self.annotation_panel.selected_annotation_index = -1
             self.annotation_panel.Refresh()
+            self.UpdateAnnotationList()
+        dlg.Destroy()
+
+    def OnSave(self, event=None):
+        """保存当前标注"""
+        if self.annotation_panel.image_path:
+            self.annotation_panel.SaveAnnotations()
+            self.SetStatusText(self.i18n.t('annotation_saved'))
+        else:
+            wx.MessageBox(
+                self.i18n.t('no_image_to_save'),
+                self.i18n.t('info'),
+                wx.OK | wx.ICON_INFORMATION
+            )
+
+        # 创建classes.txt文件
+        if self.image_files and self.class_names:
+            folder_path = os.path.dirname(self.image_files[0])
+            classes_path = os.path.join(folder_path, "classes.txt")
+
+            try:
+                with open(classes_path, 'w', encoding='utf-8') as f:
+                    for class_id in range(len(self.class_names)):
+                        f.write(f"{self.class_names[class_id]}\n")
+
+                wx.MessageBox(
+                    self.i18n.t('export_complete').format(classes_path),
+                    self.i18n.t('success'),
+                    wx.OK | wx.ICON_INFORMATION
+                )
+            except Exception as e:
+                wx.MessageBox(
+                    self.i18n.t('export_failed').format(str(e)),
+                    self.i18n.t('error'),
+                    wx.OK | wx.ICON_ERROR
+                )
 
     def LoadClassesFromFile(self, folder_path):
         """从classes.txt文件加载类别"""
@@ -2118,21 +2493,13 @@ class YoloLabelingTool(wx.Frame):
                             self.class_names.append(class_name)
                 return True
             except Exception as e:
-                wx.MessageBox(f"读取classes.txt失败: {str(e)}", "错误", wx.OK | wx.ICON_ERROR)
+                wx.MessageBox(
+                    self.i18n.t('read_classes_failed').format(str(e)),
+                    self.i18n.t('error'),
+                    wx.OK | wx.ICON_ERROR
+                )
                 return False
         return False
-
-    def OnLoadFolder(self, event):
-        """加载图片文件夹"""
-        dlg = wx.DirDialog(self, "选择图片文件夹")
-        if dlg.ShowModal() == wx.ID_OK:
-            folder_path = dlg.GetPath()
-            self.current_folder = folder_path
-            # 先尝试加载类别文件
-            self.LoadClassesFromFile(folder_path)
-            self.UpdateClassList()
-            self.LoadImageFolder(folder_path)
-        dlg.Destroy()
 
     def LoadImageFolder(self, folder_path):
         """加载文件夹中的所有图片"""
@@ -2154,7 +2521,7 @@ class YoloLabelingTool(wx.Frame):
             self.image_list.SetSelection(0)
             self.OnImageSelect(None)
 
-        self.SetStatusText(f"加载了 {len(self.image_files)} 张图片")
+        self.SetStatusText(self.i18n.t('loaded_images').format(len(self.image_files)))
 
     def OnImageSelect(self, event):
         """选择图片"""
@@ -2171,66 +2538,54 @@ class YoloLabelingTool(wx.Frame):
             if self.annotation_panel.LoadImage(image_path):
                 self.UpdateAnnotationList()
                 self.SetStatusText(
-                    f"当前图片: {os.path.basename(image_path)} ({selection + 1}/{len(self.image_files)})")
+                    self.i18n.t('current_image').format(
+                        os.path.basename(image_path),
+                        selection + 1,
+                        len(self.image_files)
+                    )
+                )
 
-    def OnSave(self, event=None):
-        """保存当前标注"""
-        if self.annotation_panel.image_path:
-            self.annotation_panel.SaveAnnotations()
-            self.SetStatusText("标注已保存")
+    def OnLoadFolder(self, event):
+        """加载图片文件夹"""
+        dlg = wx.DirDialog(self, self.i18n.t('load_folder'))
+        if dlg.ShowModal() == wx.ID_OK:
+            folder_path = dlg.GetPath()
+            self.current_folder = folder_path
+            # 先尝试加载类别文件
+            self.LoadClassesFromFile(folder_path)
+            self.UpdateClassList()
+            self.LoadImageFolder(folder_path)
+        dlg.Destroy()
+
+    def on_switch_mode(self, event):
+        """切换标注模式（YOLO / YOLO-OBB）"""
+        choice = event.GetEventObject()
+        mode = choice.GetStringSelection()
+        # 根据当前语言判断模式
+        if mode == self.i18n.t('mode_yolo'):
+            self.mode = "YOLO"
         else:
-            wx.MessageBox("没有图片需要保存", "提示", wx.OK | wx.ICON_INFORMATION)
-        # 创建classes.txt文件
-        if self.image_files and self.class_names:
-            folder_path = os.path.dirname(self.image_files[0])
-            classes_path = os.path.join(folder_path, "classes.txt")
+            self.mode = "YOLO-OBB"
+        print(f"切换到模式: {self.mode}")
 
-            try:
-                with open(classes_path, 'w', encoding='utf-8') as f:
-                    for class_id in range(len(self.class_names)):
-                        f.write(f"{self.class_names[class_id]}\n")
+    def OnPrevImage(self, event):
+        """上一张图片"""
+        if self.image_files and self.current_image_index > 0:
+            self.image_list.SetSelection(self.current_image_index - 1)
+            self.OnImageSelect(None)
 
-                wx.MessageBox(f"导出完成！\n类别文件: {classes_path}", "导出成功", wx.OK | wx.ICON_INFORMATION)
-            except Exception as e:
-                wx.MessageBox(f"导出失败: {str(e)}", "错误", wx.OK | wx.ICON_ERROR)
+    def OnNextImage(self, event):
+        """下一张图片"""
+        if self.image_files and self.current_image_index < len(self.image_files) - 1:
+            self.image_list.SetSelection(self.current_image_index + 1)
+            self.OnImageSelect(None)
 
-    def OnAddClass(self, event):
-        """添加新类别"""
-        dlg = wx.TextEntryDialog(self, "输入新类别名称:", "添加类别")
-        if dlg.ShowModal() == wx.ID_OK:
-            class_name = dlg.GetValue().strip()
-            if class_name:
-                # 找到下一个可用的类别ID
-                max_id = len(self.class_names) if self.class_names else -1
-                new_id = max_id + 1
-                self.class_names.append(class_name)
-                self.UpdateClassList()
-                # 自动选择新添加的类别
-                self.class_list.SetSelection(self.class_list.GetCount() - 1)
-                self.OnClassSelect(None)
-        dlg.Destroy()
-
-    def OnEditClass(self, event):
-        """编辑类别"""
-        selection = self.class_list.GetSelection()
-        if selection == wx.NOT_FOUND:
-            wx.MessageBox("请先选择要编辑的类别", "提示", wx.OK | wx.ICON_INFORMATION)
-            return
-
-        current_name = self.class_names[selection]
-
-        dlg = wx.TextEntryDialog(self, "编辑类别名称:", "编辑类别", current_name)
-        if dlg.ShowModal() == wx.ID_OK:
-            new_name = dlg.GetValue().strip()
-            if new_name and new_name != current_name:
-                self.class_names[selection] = new_name
-                self.UpdateClassList()
-                self.class_list.SetSelection(selection)
-                self.OnClassSelect(None)
-                # 刷新显示
-                self.annotation_panel.Refresh()
-                self.UpdateAnnotationList()
-        dlg.Destroy()
+    def OnAnnotationSelect(self, event):
+        """选择标注列表中的项目"""
+        selection = self.annotation_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.annotation_panel.selected_annotation_index = selection
+            self.annotation_panel.Refresh()
 
     def UpdateAllAnnotationFiles(self, id_mapping):
         """更新所有标注文件中的类别ID"""
@@ -2238,13 +2593,11 @@ class YoloLabelingTool(wx.Frame):
             return
 
         for image_path in self.image_files:
-            # 生成对应的标注文件路径
             base_name = os.path.splitext(os.path.basename(image_path))[0]
             txt_path = os.path.join(os.path.dirname(image_path), f"{base_name}.txt")
 
             if os.path.exists(txt_path):
                 try:
-                    # 读取标注文件
                     annotations = []
                     with open(txt_path, 'r') as f:
                         for line in f:
@@ -2252,87 +2605,25 @@ class YoloLabelingTool(wx.Frame):
                             if len(parts) == 5 or len(parts) == 9:
                                 class_id = int(parts[0])
                                 bbox = [float(x) for x in parts[1:]]
-                                # 更新类别ID
                                 if class_id in id_mapping:
                                     new_class_id = id_mapping[class_id]
                                     annotations.append((new_class_id, bbox))
-                    # 写回文件
+
                     if annotations:
                         with open(txt_path, 'w') as f:
                             for class_id, bbox in annotations:
                                 if len(bbox) == 8:
                                     f.write(
-                                        f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f} {bbox[4]:.6f} {bbox[5]:.6f} {bbox[6]:.6f} {bbox[7]:.6f}\n")
+                                        f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f} "
+                                        f"{bbox[4]:.6f} {bbox[5]:.6f} {bbox[6]:.6f} {bbox[7]:.6f}\n"
+                                    )
                                 else:
                                     f.write(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}\n")
                     else:
-                        # 如果没有标注了，删除标注文件
                         os.remove(txt_path)
 
                 except Exception as e:
                     print(f"更新标注文件 {txt_path} 失败: {e}")
-
-    def OnDeleteClass(self, event):
-        """删除类别"""
-        selection = self.class_list.GetSelection()
-        if selection == wx.NOT_FOUND:
-            wx.MessageBox("请先选择要删除的类别", "提示", wx.OK | wx.ICON_INFORMATION)
-            return
-
-        class_name = self.class_names[selection]
-
-        dlg = wx.MessageDialog(self, f"确定要删除类别 '{class_name}' 吗？\n注意：这将删除所有图片中使用该类别的标注框！",
-                               "确认删除", wx.YES_NO | wx.ICON_QUESTION)
-        if dlg.ShowModal() == wx.ID_YES:
-            # 先保存当前图片的标注
-            if self.annotation_panel.image_path:
-                self.annotation_panel.SaveAnnotations()
-
-            # 删除当前图片中所有使用该类别的标注
-            self.annotation_panel.annotations = [
-                ann for ann in self.annotation_panel.annotations
-                if ann['class'] != selection
-            ]
-
-            # 重新构建类别字典，确保ID连续
-            new_class_names = []
-            id_mapping = {}  # 旧ID到新ID的映射
-
-            new_id = 0
-            for old_id in range(len(self.class_names)):
-                if old_id != selection:
-                    new_class_names.append(self.class_names[old_id])
-                    id_mapping[old_id] = new_id
-                    new_id += 1
-
-            self.class_names = new_class_names
-
-            # 更新当前图片中所有标注的类别ID
-            for ann in self.annotation_panel.annotations:
-                old_class_id = ann['class']
-                if old_class_id in id_mapping:
-                    ann['class'] = id_mapping[old_class_id]
-
-            # 更新所有标注文件
-            self.UpdateAllAnnotationFiles(id_mapping)
-
-            self.UpdateClassList()
-
-            # 如果删除后没有类别了，清空当前类别选择
-            if not self.class_names:
-                self.current_class_label.SetLabel("无")
-            else:
-                # 选择合适的类别（如果删除的是最后一个，选择前一个；否则选择当前位置）
-                new_selection = min(selection, self.class_list.GetCount() - 1)
-                self.class_list.SetSelection(new_selection)
-                self.OnClassSelect(None)
-
-            self.annotation_panel.selected_annotation_index = -1
-
-            # 刷新显示
-            self.annotation_panel.Refresh()
-            self.UpdateAnnotationList()
-        dlg.Destroy()
 
     def OnMoveUp(self, event):
         """上移类别"""
@@ -2340,27 +2631,19 @@ class YoloLabelingTool(wx.Frame):
         if selection == wx.NOT_FOUND or selection == 0:
             return
 
-        # 先保存当前图片的标注
         if self.annotation_panel.image_path:
             self.annotation_panel.SaveAnnotations()
 
-        # 获取排序后的类别列表
         sorted_items = [(class_id, class_name) for class_id, class_name in enumerate(self.class_names)]
-
-        # 交换位置
         sorted_items[selection], sorted_items[selection - 1] = sorted_items[selection - 1], sorted_items[selection]
 
-        # 重新分配ID并更新标注
         id_mapping = self.ReassignClassIds(sorted_items)
-
-        # 更新所有标注文件
         self.UpdateAllAnnotationFiles(id_mapping)
 
         self.UpdateClassList()
         self.class_list.SetSelection(selection - 1)
         self.OnClassSelect(None)
 
-        # 刷新显示
         self.annotation_panel.Refresh()
         self.UpdateAnnotationList()
 
@@ -2370,44 +2653,33 @@ class YoloLabelingTool(wx.Frame):
         if selection == wx.NOT_FOUND or selection == self.class_list.GetCount() - 1:
             return
 
-        # 先保存当前图片的标注
         if self.annotation_panel.image_path:
             self.annotation_panel.SaveAnnotations()
 
-        # 获取排序后的类别列表
         sorted_items = [(class_id, class_name) for class_id, class_name in enumerate(self.class_names)]
-
-        # 交换位置
         sorted_items[selection], sorted_items[selection + 1] = sorted_items[selection + 1], sorted_items[selection]
 
-        # 重新分配ID并更新标注
         id_mapping = self.ReassignClassIds(sorted_items)
-
-        # 更新所有标注文件
         self.UpdateAllAnnotationFiles(id_mapping)
 
         self.UpdateClassList()
         self.class_list.SetSelection(selection + 1)
         self.OnClassSelect(None)
 
-        # 刷新显示
         self.annotation_panel.Refresh()
         self.UpdateAnnotationList()
 
     def ReassignClassIds(self, sorted_items):
         """重新分配类别ID并更新所有标注"""
-        # 创建旧ID到新ID的映射
         old_to_new_mapping = {}
-
-        # 重新构建class_names字典，使用连续的ID
         new_class_names = self.class_names
+
         for new_id, (old_id, class_name) in enumerate(sorted_items):
             new_class_names[new_id] = class_name
             old_to_new_mapping[old_id] = new_id
 
         self.class_names = new_class_names
 
-        # 更新当前图片中所有标注的类别ID
         for ann in self.annotation_panel.annotations:
             old_class_id = ann['class']
             if old_class_id in old_to_new_mapping:
@@ -2422,7 +2694,7 @@ class YoloLabelingTool(wx.Frame):
             class_name = self.class_names[selection]
             self.current_class_label.SetLabel(f"{selection}: {class_name}")
         else:
-            self.current_class_label.SetLabel("无")
+            self.current_class_label.SetLabel(self.i18n.t('no_class'))
 
     def UpdateClassList(self):
         """更新类别列表显示"""
@@ -2430,53 +2702,32 @@ class YoloLabelingTool(wx.Frame):
         for class_id in range(len(self.class_names)):
             self.class_list.Append(f"{class_id}: {self.class_names[class_id]}")
 
-        # 如果有类别，默认选择第一个
         if self.class_list.GetCount() > 0:
             self.class_list.SetSelection(0)
             self.OnClassSelect(None)
         else:
-            self.current_class_label.SetLabel("无")
+            self.current_class_label.SetLabel(self.i18n.t('no_class'))
 
     def GetCurrentClass(self):
         """获取当前选择的类别ID"""
         selection = self.class_list.GetSelection()
         if selection != wx.NOT_FOUND and self.class_names:
             return selection
-        return 0  # 如果没有选择或没有类别，返回0
+        return 0
 
-    # def UpdateAnnotationList(self):
-    #     """更新标注列表显示"""
-    #     self.annotation_list.Freeze()
-    #     self.annotation_list.Clear()
-    #     for i, ann in enumerate(self.annotation_panel.annotations):
-    #         if ann['class'] < len(self.class_names):
-    #             class_name = self.class_names[ann['class']]
-    #         else:
-    #             class_name = f"Class {ann['class']}"
-    #         bbox = ann['bbox']
-    #
-    #         # 如果是选中的标注，添加标记
-    #         prefix = "► " if i == self.annotation_panel.selected_annotation_index else "  "
-    #         self.annotation_list.Append(
-    #             f"{prefix}{i + 1}. {class_name} ({bbox[0]:.3f}, {bbox[1]:.3f}, {bbox[2]:.3f}, {bbox[3]:.3f})")
-    #     self.annotation_list.Thaw()
     def UpdateAnnotationList(self):
         """增量更新标注列表，避免闪烁"""
         anns = self.annotation_panel.annotations
         list_ctrl = self.annotation_list
-        current_count = list_ctrl.GetItemCount()
         target_count = len(anns)
 
-        # 1. 删除多余的项（如果列表比 annotations 长）
         while list_ctrl.GetItemCount() > target_count:
             list_ctrl.DeleteItem(list_ctrl.GetItemCount() - 1)
 
-        # 2. 添加新项（如果 annotations 比列表长）
         while list_ctrl.GetItemCount() < target_count:
             idx = list_ctrl.GetItemCount()
-            list_ctrl.InsertItem(idx, "")  # 占位，后面会填内容
+            list_ctrl.InsertItem(idx, "")
 
-        # 3. 更新每一项的内容（包括选中标记）
         for i in range(target_count):
             ann = anns[i]
             class_name = self.class_names[ann['class']] if ann['class'] < len(
@@ -2484,7 +2735,6 @@ class YoloLabelingTool(wx.Frame):
             bbox = ann['bbox']
             prefix = "►" if i == self.annotation_panel.selected_annotation_index else ""
 
-            # 更新各列
             list_ctrl.SetItem(i, 0, prefix)
             list_ctrl.SetItem(i, 1, str(i + 1))
             list_ctrl.SetItem(i, 2, class_name)
@@ -2492,26 +2742,26 @@ class YoloLabelingTool(wx.Frame):
 
     def UpdateAnnotationListItem(self, index):
         """仅更新指定索引的标注列表项"""
-        if index < 0 or index >= self.annotation_list.GetCount():
+        if index < 0 or index >= self.annotation_list.GetItemCount():
             return
 
         ann = self.annotation_panel.annotations[index]
-        if ann['class'] < len(self.class_names):
-            class_name = self.class_names[ann['class']]
-        else:
-            class_name = f"Class {ann['class']}"
+        class_name = self.class_names[ann['class']] if ann['class'] < len(
+            self.class_names) else f"Class {ann['class']}"
         bbox = ann['bbox']
-        prefix = "► " if index == self.annotation_panel.selected_annotation_index else "  "
-        new_text = f"{prefix}{index + 1}. {class_name} ({bbox[0]:.3f}, {bbox[1]:.3f}, {bbox[2]:.3f}, {bbox[3]:.3f})"
-        self.annotation_list.SetString(index, new_text)
+        prefix = "►" if index == self.annotation_panel.selected_annotation_index else ""
+
+        self.annotation_list.SetItem(index, 0, prefix)
+        self.annotation_list.SetItem(index, 1, str(index + 1))
+        self.annotation_list.SetItem(index, 2, class_name)
+        self.annotation_list.SetItem(index, 3, f"({bbox[0]:.3f}, {bbox[1]:.3f}, {bbox[2]:.3f}, {bbox[3]:.3f})")
 
     def OnDeleteAnnotation(self, event):
         """删除选中的标注"""
-        selection = self.annotation_list.GetFirstSelected()  # ← 改这里
+        selection = self.annotation_list.GetFirstSelected()
         if selection != wx.NOT_FOUND:
             del self.annotation_panel.annotations[selection]
 
-            # 更新选中索引
             if self.annotation_panel.selected_annotation_index == selection:
                 self.annotation_panel.selected_annotation_index = -1
             elif self.annotation_panel.selected_annotation_index > selection:
@@ -2528,53 +2778,17 @@ class YoloLabelingTool(wx.Frame):
     def OnClose(self, event=None):
         """处理窗口关闭事件"""
         print("OnClose")
-        # 保存当前标注
         self.OnSave()
-        # 确保窗口真正关闭（调用 Destroy）
         self.Destroy()
 
     def OnAbout(self, event):
         import wx.adv
         """关于对话框"""
         info = wx.adv.AboutDialogInfo()
-        info.SetName("labelbridge")
+        info.SetName(self.i18n.t('app_title'))
         info.SetVersion("1.0")
-        info.SetDescription(
-            "labelbridge - 高效便捷的图像标注工具\n\n"
-            "支持 YOLO 和 YOLO-OBB（旋转框）两种标注模式\n\n"
-            "使用说明:\n"
-            "1. 导入图片文件夹：加载需要标注的图片\n"
-            "2. 类别管理：添加、编辑、排序类别列表\n"
-            "3. 选择当前类别：在左侧列表中选择标注类别\n"
-            "4. 图像标注：\n"
-            "   • 普通矩形框（YOLO模式）：\n"
-            "     - 左键拖拽：创建新标注框\n"
-            "     - 单击框：选中标注框\n"
-            "     - 拖拽框：移动选中框\n"
-            "     - 拖拽手柄：调整框大小\n"
-            "   • 旋转矩形框（YOLO-OBB模式）：\n"
-            "     - Z/X/C/V键：调整十字辅助线角度\n"
-            "     - 右键拖动：实时调整旋转角度\n"
-            "     - 其他操作同普通框\n"
-            "5. 图像导航：\n"
-            "   • 左右箭头键：切换图片\n"
-            "   • 图片列表：直接选择图片\n"
-            "6. 标注编辑：\n"
-            "   • Delete键：删除选中标注\n"
-            "   • ESC键：取消选择\n"
-            "7. 平移缩放：\n"
-            "   • 中键拖动：平移图像\n"
-            "   • Ctrl+滚轮：以鼠标为中心缩放\n"
-            "8. 保存标注：\n"
-            "   • 自动保存：切换图片时自动保存\n"
-            "   • 手动保存：点击导出按钮保存\n\n"
-            "导出格式：\n"
-            "• YOLO格式：class_id x_center y_center width height\n"
-            "• YOLO-OBB格式：class_id x1 y1 x2 y2 x3 y3 x4 y4\n"
-            "• 类别文件：自动生成 classes.txt"
-        )
+        info.SetDescription(self.i18n.t('about_description'))
         info.SetCopyright("(C) 2025")
-        
         wx.adv.AboutBox(info)
 
 
