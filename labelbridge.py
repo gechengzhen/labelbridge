@@ -470,7 +470,7 @@ class AnnotationPanel(wx.Panel):
             # 绘制十字（在最后，覆盖在其它内容之上）
             if self.show_crosshair and self.cross_pos:
                 # 鼠标十字（颜色：浅灰）
-                self.DrawCrosshair(dc, self.cross_pos, wx.Colour(0, 255, 0), style=wx.PENSTYLE_DOT,
+                self.DrawCrosshair(dc, self.cross_pos, wx.Colour(255, 255, 255), style=wx.PENSTYLE_DOT,
                                    angle_deg=self.cross_angle)
         else:
             dc.Clear()
@@ -2249,7 +2249,7 @@ class YoloLabelingTool(wx.Frame):
                     with open(txt_path, 'r') as f:
                         for line in f:
                             parts = line.strip().split()
-                            if len(parts) == 5:
+                            if len(parts) == 5 or len(parts) == 9:
                                 class_id = int(parts[0])
                                 bbox = [float(x) for x in parts[1:]]
                                 # 更新类别ID
@@ -2260,7 +2260,11 @@ class YoloLabelingTool(wx.Frame):
                     if annotations:
                         with open(txt_path, 'w') as f:
                             for class_id, bbox in annotations:
-                                f.write(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}\n")
+                                if len(bbox) == 8:
+                                    f.write(
+                                        f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f} {bbox[4]:.6f} {bbox[5]:.6f} {bbox[6]:.6f} {bbox[7]:.6f}\n")
+                                else:
+                                    f.write(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}\n")
                     else:
                         # 如果没有标注了，删除标注文件
                         os.remove(txt_path)
@@ -2533,33 +2537,44 @@ class YoloLabelingTool(wx.Frame):
         import wx.adv
         """关于对话框"""
         info = wx.adv.AboutDialogInfo()
-        info.SetName("YOLO标注工具 - 增强版")
-        info.SetVersion("2.0")
+        info.SetName("labelbridge")
+        info.SetVersion("1.0")
         info.SetDescription(
-            "用于YOLO目标检测的图片标注工具 - 增强版\n\n"
-            "新功能：\n"
-            "• 框选中和编辑：单击选中标注框\n"
-            "• 拖拽移动：选中框后可拖拽移动位置\n"
-            "• 调整大小：拖拽框的角点或边缘调整大小\n"
-            "• 键盘快捷键：Delete删除，ESC取消选择\n"
-            "• 导航快捷键：左右箭头键切换图片\n\n"
+            "labelbridge - 高效便捷的图像标注工具\n\n"
+            "支持 YOLO 和 YOLO-OBB（旋转框）两种标注模式\n\n"
             "使用说明:\n"
-            "1. 导入图片文件夹\n"
-            "2. 添加或选择类别\n"
-            "3. 左键拖拽创建新标注框\n"
-            "4. 单击框选中，拖拽移动或调整大小\n"
-            "5. 右键或Delete键删除标注框\n"
-            "6. 保存并导出标注\n"
-            "• 左键拖拽：创建新框\n"
-            "• 单击框：选中标注\n"
-            "• 拖拽框：移动标注\n"
-            "• 拖拽角点/边：调整大小\n"
-            "• 右键框：删除标注\n"
-            "• Delete键：删除选中标注\n"
-            "• ESC键：取消选择"
+            "1. 导入图片文件夹：加载需要标注的图片\n"
+            "2. 类别管理：添加、编辑、排序类别列表\n"
+            "3. 选择当前类别：在左侧列表中选择标注类别\n"
+            "4. 图像标注：\n"
+            "   • 普通矩形框（YOLO模式）：\n"
+            "     - 左键拖拽：创建新标注框\n"
+            "     - 单击框：选中标注框\n"
+            "     - 拖拽框：移动选中框\n"
+            "     - 拖拽手柄：调整框大小\n"
+            "   • 旋转矩形框（YOLO-OBB模式）：\n"
+            "     - Z/X/C/V键：调整十字辅助线角度\n"
+            "     - 右键拖动：实时调整旋转角度\n"
+            "     - 其他操作同普通框\n"
+            "5. 图像导航：\n"
+            "   • 左右箭头键：切换图片\n"
+            "   • 图片列表：直接选择图片\n"
+            "6. 标注编辑：\n"
+            "   • Delete键：删除选中标注\n"
+            "   • ESC键：取消选择\n"
+            "7. 平移缩放：\n"
+            "   • 中键拖动：平移图像\n"
+            "   • Ctrl+滚轮：以鼠标为中心缩放\n"
+            "8. 保存标注：\n"
+            "   • 自动保存：切换图片时自动保存\n"
+            "   • 手动保存：点击导出按钮保存\n\n"
+            "导出格式：\n"
+            "• YOLO格式：class_id x_center y_center width height\n"
+            "• YOLO-OBB格式：class_id x1 y1 x2 y2 x3 y3 x4 y4\n"
+            "• 类别文件：自动生成 classes.txt"
         )
         info.SetCopyright("(C) 2025")
-
+        
         wx.adv.AboutBox(info)
 
 
