@@ -478,6 +478,7 @@ class AnnotationPanel(wx.Panel):
             self.image_path = image_path
             self.image = wx.Image(image_path)
             self.image_size = (self.image.GetWidth(), self.image.GetHeight())
+            self._last_scaled_key = None
             self.fit_image_to_panel()
             size = self.GetClientSize()
             self.buffer = wx.Bitmap(size.width, size.height)
